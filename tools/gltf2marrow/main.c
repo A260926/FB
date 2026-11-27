@@ -23,6 +23,8 @@ static int usage(FILE *f, int code) {
         "  --skin <i>      select skin index i (default: require exactly one skin)\n"
         "  --loop          mark emitted clips LOOPING (warns if a clip does not close)\n"
         "  --codec0        force raw codec 0 (skip the unit-scale codec-1 snap; for the codec sweep)\n"
+        "  --preserve-nodes  keep the real glTF node chain (joints + ancestor closure) instead of\n"
+        "                  folding non-joint ancestors into each joint's local TRS\n"
         "  --anim <name>   convert only the named animation (repeatable; default: all)\n"
         "  -h, --help      show this help\n"
         "\n"
@@ -47,6 +49,7 @@ int main(int argc, char **argv) {
         else if (strcmp(a, "--skin") == 0) { if (++i >= argc) { fprintf(stderr, "gltf2marrow: --skin needs an index\n"); return 2; } opt.skin_index = atoi(argv[i]); }
         else if (strcmp(a, "--loop") == 0) { opt.loop = 1; }
         else if (strcmp(a, "--codec0") == 0) { opt.force_codec0 = 1; }
+        else if (strcmp(a, "--preserve-nodes") == 0) { opt.preserve_nodes = 1; }
         else if (strcmp(a, "--anim") == 0) {
             if (++i >= argc) { fprintf(stderr, "gltf2marrow: --anim needs a name\n"); return 2; }
             if (anim_count >= MAX_ANIMS) { fprintf(stderr, "gltf2marrow: too many --anim (max %d)\n", MAX_ANIMS); return 2; }

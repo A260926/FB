@@ -159,9 +159,8 @@ MRW_DECL_BLEND_KERNEL(MRW_BLEND_KERNEL) {
         __m256i gA = mrw_samp_gidx(&cxA), gB = mrw_samp_gidx(&cxB);   /* per-tile, hoisted out of j */
 #endif
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
-            uint16_t parent = is_root ? 0
-                : mrw_rd_u16(skel->base + skel->parent_off + (size_t)j * MRW_PARENT_STRIDE);
+            uint16_t parent = mrw_rd_u16(skel->base + skel->parent_off + (size_t)j * MRW_PARENT_STRIDE);
+            int is_root = (parent == 0xFFFF); /* forest root; several roots allowed */
             float ib[12];
             memcpy(ib, skel->base + skel->inverse_bind_off + (size_t)j * MRW_INVERSE_BIND_STRIDE,
                    MRW_INVERSE_BIND_STRIDE);
@@ -225,9 +224,8 @@ MRW_DECL_ACCUM_KERNEL(MRW_ACCUM_KERNEL) {
         __m256i gidx = mrw_samp_gidx(&cx);   /* per-tile, hoisted out of j */
 #endif
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
-            uint16_t parent = is_root ? 0
-                : mrw_rd_u16(skel->base + skel->parent_off + (size_t)j * MRW_PARENT_STRIDE);
+            uint16_t parent = mrw_rd_u16(skel->base + skel->parent_off + (size_t)j * MRW_PARENT_STRIDE);
+            int is_root = (parent == 0xFFFF); /* forest root; several roots allowed */
             float ib[12];
             memcpy(ib, skel->base + skel->inverse_bind_off + (size_t)j * MRW_INVERSE_BIND_STRIDE,
                    MRW_INVERSE_BIND_STRIDE);

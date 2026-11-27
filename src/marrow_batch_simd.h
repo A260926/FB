@@ -63,11 +63,10 @@ mrw_result MRW_KERNEL(const mrw_skeleton_view *skel, const mrw_clip_view *clip,
 #endif
 
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
-            /* parent + inverse_bind are per-joint and constant across tiles/lanes; read them inline
-             * from the validated skeleton - no per-tile call into mrw_skeleton_*. parent < j. */
-            uint16_t parent = is_root ? 0
-                : mrw_rd_u16(skel->base + skel->parent_off + (size_t)j * MRW_PARENT_STRIDE);
+            /* parent is per-joint and constant across tiles/lanes; read inline from the validated
+             * skeleton. parent < j, or 0xFFFF for a forest root (several roots allowed). */
+            uint16_t parent = mrw_rd_u16(skel->base + skel->parent_off + (size_t)j * MRW_PARENT_STRIDE);
+            int is_root = (parent == 0xFFFF);
 
             /* inverse_bind is shared by every lane → broadcast once and fold M_j = model(j) ∘
              * inverse_bind in the VERTICAL path (one wide affine_mul per subgroup), not a scalar

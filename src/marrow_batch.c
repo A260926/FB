@@ -117,9 +117,10 @@ static mrw_result batch_scalar(const mrw_skeleton_view *skel, const mrw_clip_vie
         }
 
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
-            uint16_t parent = 0;
-            if (!is_root) mrw_skeleton_parent(skel, j, &parent); /* parent < j (validated) */
+            /* parent is per-joint and constant across tiles/lanes. 0xFFFF ⇒ a forest root. */
+            uint16_t parent;
+            mrw_skeleton_parent(skel, j, &parent); /* parent < j or 0xFFFF (validated) */
+            int is_root = (parent == 0xFFFF);
 
             /* Compose model(j) per lane: model(j) = root ? local : model(parent) ∘ local. */
             for (uint32_t l = 0; l < MRW_LANES; ++l) {

@@ -85,9 +85,9 @@ static mrw_result blend_scalar(const mrw_skeleton_view *skel,
             stB[l] = mrw_clip_frame(clipB, timesB[idx], &i0B[l], &uB[l]);
         }
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
             uint16_t parent = 0;
-            if (!is_root) mrw_skeleton_parent(skel, j, &parent);
+            mrw_skeleton_parent(skel, j, &parent); /* parent < j or 0xFFFF (validated) */
+            int is_root = (parent == 0xFFFF);
             float ib[12]; mrw_skeleton_inverse_bind(skel, j, ib);
             for (uint32_t l = 0; l < MRW_LANES; ++l) {
                 uint32_t idx = base + (l < live ? l : 0);
@@ -121,9 +121,9 @@ static mrw_result accum_scalar(const mrw_skeleton_view *skel, const mrw_clip_vie
             st[l] = mrw_clip_frame(base_clip, times[idx], &i0[l], &uu[l]);
         }
         for (uint32_t j = 0; j < jc; ++j) {
-            int is_root = (j == 0);
             uint16_t parent = 0;
-            if (!is_root) mrw_skeleton_parent(skel, j, &parent);
+            mrw_skeleton_parent(skel, j, &parent); /* parent < j or 0xFFFF (validated) */
+            int is_root = (parent == 0xFFFF);
             float ib[12]; mrw_skeleton_inverse_bind(skel, j, ib);
             for (uint32_t l = 0; l < MRW_LANES; ++l) {
                 uint32_t idx = base + (l < live ? l : 0);

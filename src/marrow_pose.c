@@ -41,11 +41,11 @@ mrw_result mrw_local_to_model(const mrw_skeleton_view *skel, const mrw_trs *loca
     for (uint32_t j = 0; j < n; ++j) {
         float local12[12];
         mrw_trs_to_affine(&locals[j], local12);
-        if (j == 0) {
-            memcpy(out_model, local12, sizeof local12);          /* root: model = local */
+        uint16_t parent;
+        mrw_skeleton_parent(skel, j, &parent);            /* parent < j or 0xFFFF (validated) */
+        if (parent == 0xFFFF) {
+            memcpy(out_model + (size_t)j * 12, local12, sizeof local12); /* forest root: model = local */
         } else {
-            uint16_t parent;
-            mrw_skeleton_parent(skel, j, &parent);            /* parent < j (validated) */
             mrw_affine_mul(out_model + (size_t)parent * 12, local12, out_model + (size_t)j * 12);
         }
     }
@@ -89,11 +89,11 @@ mrw_result mrw_clip_to_palette(const mrw_skeleton_view *skel, const mrw_clip_vie
         }
         float local12[12];
         mrw_trs_to_affine(&lj, local12);
-        if (j == 0) {
-            memcpy(scratch_model, local12, sizeof local12);
+        uint16_t parent;
+        mrw_skeleton_parent(skel, j, &parent);
+        if (parent == 0xFFFF) {
+            memcpy(scratch_model + (size_t)j * 12, local12, sizeof local12); /* forest root */
         } else {
-            uint16_t parent;
-            mrw_skeleton_parent(skel, j, &parent);
             mrw_affine_mul(scratch_model + (size_t)parent * 12, local12, scratch_model + (size_t)j * 12);
         }
         float ib[12];

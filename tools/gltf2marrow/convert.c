@@ -189,14 +189,17 @@ static int node_local_affine(cgltf_data *data, const cgltf_node *node, const sam
     return 0;
 }
 
-/* ---- skeleton context shared by rest + clip folds ---- */
+/* ---- skeleton context shared by rest + clip emission ---- */
 typedef struct {
     cgltf_data *data;
     const cgltf_skin *skin;
-    const int32_t  *parent_js; /* skin-order joint -> parent skin-order index, -1 = root */
-    const uint32_t *order;     /* marrow index -> skin-order joint index                 */
     uint32_t jc;
     char *diag; size_t diag_cap;
+    /* fold mode (preserve_nodes == 0) */
+    const int32_t  *parent_js; /* skin-order joint -> parent skin-order index, -1 = root */
+    const uint32_t *order;     /* marrow index -> skin-order joint index                 */
+    /* preserve mode (preserve_nodes != 0) */
+    const mrw_g2m_forest_order *forest;
 } skelctx;
 
 /* Fold the node chain from the parent joint (exclusive) to joint `mj` (inclusive) into a marrow
@@ -242,7 +245,38 @@ static mrw_result fold_local(const skelctx *c, const samplers *ss, float t, uint
     return MRW_OK;
 }
 
-/* mark every node that appears in any joint's fold path (the nodes whose animation affects output) */
+/* Preserve mode: emit the node's OWN local TRS at time `t` (ss=NULL → rest pose) - no folding. The
+ * node is a real member of the output skeleton, so its parent chain is exactly glTF's. A static
+ * `matrix` node is decomposed into TRS (the single-node representability limit is unchanged: shear
+ * or a degenerate scale in ONE node's matrix is still an error); an ancestor chain's sheared
+ * product is legal because it is never decomposed here. */
+static mrw_result preserve_local(const skelctx *c, const samplers *ss, float t, uint32_t mj, float out10[10]) {
+    uint32_t ni = c->forest->node_index[mj];
+    const cgltf_node *N = &c->data->nodes[ni];
+    if (!N->has_matrix) { /* animated/default TRS: exact, no affine round-trip */
+        mrw_trs trs;
+        if (node_trs_at(c->data, N, ss, t, &trs)) {
+            set_diag(c->diag, c->diag_cap, "node %u: sampler read failed", ni);
+            return MRW_E_FORMAT;
+        }
+        memcpy(out10 + 0, trs.rot, 16);
+        memcpy(out10 + 4, trs.trans, 12);
+        memcpy(out10 + 7, trs.scale, 12);
+        return MRW_OK;
+    }
+    float A[12], q[4], tr[3], sc[3];
+    colmajor4x4_to_affine(N->matrix, A);
+    if (!decompose_trs(A, q, tr, sc, 1e-4f)) {
+        set_diag(c->diag, c->diag_cap,
+                 "node %u: matrix has shear or degenerate scale (not representable as TRS)", ni);
+        return MRW_E_FORMAT;
+    }
+    memcpy(out10 + 0, q, 16);
+    memcpy(out10 + 4, tr, 12);
+    memcpy(out10 + 7, sc, 12);
+    return MRW_OK;
+}
+
 static void mark_relevant(const skelctx *c, uint8_t *relevant) {
     for (uint32_t mj = 0; mj < c->jc; ++mj) {
         uint32_t js = c->order[mj];
@@ -251,6 +285,18 @@ static void mark_relevant(const skelctx *c, uint8_t *relevant) {
         for (const cgltf_node *cur = N; cur != PN && cur != NULL; cur = cur->parent)
             relevant[(uint32_t)(cur - c->data->nodes)] = 1;
     }
+}
+
+/* preserve mode: every output member is a real node sampled directly (no fold, no parent compose),
+ * so exactly those nodes' animation channels drive the output. */
+static void mark_relevant_preserve(const skelctx *c, uint8_t *relevant) {
+    for (uint32_t mj = 0; mj < c->jc; ++mj) relevant[c->forest->node_index[mj]] = 1;
+}
+
+/* emit one output member's local TRS at time `t` (the mode's own local definition) */
+static mrw_result emit_local(const skelctx *c, const samplers *ss, float t, uint32_t mj, float out10[10]) {
+    if (c->forest) return preserve_local(c, ss, t, mj, out10);
+    return fold_local(c, ss, t, mj, out10);
 }
 
 /* ---- one clip: resample an animation onto a dense joint-major codec-0 track ---- */
@@ -320,7 +366,7 @@ static mrw_result build_clip(const skelctx *c, const cgltf_animation *anim, floa
         float t = (sample_count < 2) ? 0.0f : (sidx == sample_count - 1 ? D : (float)sidx / fps_stored);
         for (uint32_t mj = 0; mj < c->jc; ++mj) {
             float *dst = samples + ((size_t)mj * sample_count + sidx) * 10; /* joint-major layout */
-            rc = fold_local(c, &ss, t, mj, dst);
+            rc = emit_local(c, &ss, t, mj, dst);
             if (rc) { free(samples); goto cleanup; }
         }
     }
@@ -403,6 +449,8 @@ mrw_result mrw_g2m_convert(const mrw_g2m_options *opt, uint8_t **out_buf, size_t
 
     mrw_result rc = MRW_OK;
     mrw_g2m_joint_order jo = {0};
+    mrw_g2m_forest_order fo = {0};
+    int preserve = opt->preserve_nodes != 0;
     uint16_t *parent = NULL; float *rest_local = NULL, *inverse_bind = NULL;
     char **names = NULL; char *name_pool = NULL;
     uint8_t *relevant = NULL;
@@ -421,14 +469,28 @@ mrw_result mrw_g2m_convert(const mrw_g2m_options *opt, uint8_t **out_buf, size_t
     } else { set_diag(diag, diag_cap, "%zu skins present; pass --skin <index>", data->skins_count); rc = MRW_E_FORMAT; goto done; }
     const cgltf_skin *skin = &data->skins[skin_i];
 
-    /* ---- parent resolution + single-root requirement + topological (marrow) order ---- */
-    rc = mrw_g2m_joint_order_build(skin, &jo, diag, diag_cap);
-    if (rc) goto done;
-    uint32_t jc = jo.joint_count;
+    /* ---- ordering: fold mode requires a single rooted tree and folds non-joint ancestors;
+     * preserve mode keeps the real node chain (ancestor closure of the selected skin's joints,
+     * forest allowed, no virtual root). Same entry point either way - the converter shares it with
+     * any external loader. ---- */
+    skelctx ctx = { data, skin, 0, diag, diag_cap, NULL, NULL, NULL };
+    uint32_t jc;
+    if (preserve) {
+        rc = mrw_g2m_forest_order_build(skin, data->nodes, data->nodes_count, &fo, diag, diag_cap);
+        if (rc) goto done;
+        jc = fo.joint_count;
+        ctx.jc = jc;
+        ctx.forest = &fo;
+    } else {
+        rc = mrw_g2m_joint_order_build(skin, &jo, diag, diag_cap);
+        if (rc) goto done;
+        jc = jo.joint_count;
+        ctx.jc = jc;
+        ctx.parent_js = jo.parent_js;
+        ctx.order = jo.order;
+    }
 
-    skelctx ctx = { data, skin, jo.parent_js, jo.order, jc, diag, diag_cap };
-
-    /* ---- skeleton arrays in marrow order ---- */
+    /* ---- skeleton arrays in output order ---- */
     parent = (uint16_t *)malloc((size_t)jc * sizeof(uint16_t));
     rest_local = (float *)malloc((size_t)jc * 10 * sizeof(float));
     inverse_bind = (float *)malloc((size_t)jc * 12 * sizeof(float));
@@ -436,30 +498,61 @@ mrw_result mrw_g2m_convert(const mrw_g2m_options *opt, uint8_t **out_buf, size_t
     name_pool = (char *)malloc((size_t)jc * 24); /* "joint_4294967295" + NUL fits in 24 */
     if (!parent || !rest_local || !inverse_bind || !names || !name_pool) { rc = MRW_E_OVERFLOW; goto done; }
 
-    for (uint32_t mj = 0; mj < jc; ++mj) {
-        uint32_t js = jo.order[mj];
-        parent[mj] = (jo.parent_js[js] < 0) ? 0xFFFFu : (uint16_t)jo.marrow_of[jo.parent_js[js]];
+    if (preserve) {
+        /* rest/name per real node; inverse-bind by ORIGINAL skin slot, then identity for every
+         * auxiliary ancestor bone (not a skin joint). Two separate index spaces: `node_index`
+         * addresses data.nodes, `slot_to_out` addresses skin.joints. */
+        for (uint32_t mj = 0; mj < jc; ++mj) {
+            uint32_t ni = fo.node_index[mj];
+            parent[mj] = (fo.parent[mj] < 0) ? 0xFFFFu : (uint16_t)fo.parent[mj];
 
-        rc = fold_local(&ctx, NULL, 0.0f, mj, rest_local + (size_t)mj * 10);
-        if (rc) goto done;
+            rc = emit_local(&ctx, NULL, 0.0f, mj, rest_local + (size_t)mj * 10);
+            if (rc) goto done;
 
-        if (skin->inverse_bind_matrices) {
-            float m16[16];
-            if (!cgltf_accessor_read_float(skin->inverse_bind_matrices, js, m16, 16)) { set_diag(diag, diag_cap, "joint %u: inverse-bind matrix read failed", mj); rc = MRW_E_FORMAT; goto done; }
-            colmajor4x4_to_affine(m16, inverse_bind + (size_t)mj * 12);
-        } else {
             memcpy(inverse_bind + (size_t)mj * 12, G2M_IDENT12, sizeof G2M_IDENT12);
-        }
 
-        const char *nm = skin->joints[js]->name;
-        if (nm) { names[mj] = (char *)nm; }
-        else { char *p = name_pool + (size_t)mj * 24; snprintf(p, 24, "joint_%u", mj); names[mj] = p; }
+            const char *nm = data->nodes[ni].name;
+            if (nm) { names[mj] = (char *)nm; }
+            else { char *p = name_pool + (size_t)mj * 24; snprintf(p, 24, "joint_%u", mj); names[mj] = p; }
+        }
+        if (skin->inverse_bind_matrices) {
+            for (cgltf_size si = 0; si < skin->joints_count; ++si) {
+                uint32_t mj = (uint32_t)fo.slot_to_out[si];
+                float m16[16];
+                if (!cgltf_accessor_read_float(skin->inverse_bind_matrices, si, m16, 16)) {
+                    set_diag(diag, diag_cap, "skin slot %zu: inverse-bind matrix read failed", (size_t)si);
+                    rc = MRW_E_FORMAT; goto done;
+                }
+                colmajor4x4_to_affine(m16, inverse_bind + (size_t)mj * 12);
+            }
+        }
+    } else {
+        for (uint32_t mj = 0; mj < jc; ++mj) {
+            uint32_t js = jo.order[mj];
+            parent[mj] = (jo.parent_js[js] < 0) ? 0xFFFFu : (uint16_t)jo.marrow_of[jo.parent_js[js]];
+
+            rc = emit_local(&ctx, NULL, 0.0f, mj, rest_local + (size_t)mj * 10);
+            if (rc) goto done;
+
+            if (skin->inverse_bind_matrices) {
+                float m16[16];
+                if (!cgltf_accessor_read_float(skin->inverse_bind_matrices, js, m16, 16)) { set_diag(diag, diag_cap, "joint %u: inverse-bind matrix read failed", mj); rc = MRW_E_FORMAT; goto done; }
+                colmajor4x4_to_affine(m16, inverse_bind + (size_t)mj * 12);
+            } else {
+                memcpy(inverse_bind + (size_t)mj * 12, G2M_IDENT12, sizeof G2M_IDENT12);
+            }
+
+            const char *nm = skin->joints[js]->name;
+            if (nm) { names[mj] = (char *)nm; }
+            else { char *p = name_pool + (size_t)mj * 24; snprintf(p, 24, "joint_%u", mj); names[mj] = p; }
+        }
     }
 
     /* ---- select animations ---- */
     relevant = (uint8_t *)calloc(data->nodes_count, 1);
     if (!relevant) { rc = MRW_E_OVERFLOW; goto done; }
-    mark_relevant(&ctx, relevant);
+    if (preserve) mark_relevant_preserve(&ctx, relevant);
+    else          mark_relevant(&ctx, relevant);
 
     /* worst case is one selection per requested name (named) or per animation (all); a repeated
      * --anim must not push past the allocation, so size by the request and dedup indices. */
@@ -511,6 +604,7 @@ done:
     free(anim_sel); free(relevant);
     free(name_pool); free(names); free(inverse_bind); free(rest_local); free(parent);
     mrw_g2m_joint_order_free(&jo);
+    mrw_g2m_forest_order_free(&fo);
     cgltf_free(data);
     return rc;
 }
