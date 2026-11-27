@@ -5,3 +5,4 @@ html
 .cache
 .vscode
 .DS_store
+.task-build

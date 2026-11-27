@@ -16,13 +16,17 @@ target_link_libraries(properties pmp)
 add_executable(eigen eigen.cpp)
 target_link_libraries(eigen pmp)
 
+add_executable(uv_optimization uv_optimization.cpp)
+target_link_libraries(uv_optimization pmp)
+
 add_custom_target(
   examples
   COMMAND
   WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
   COMMENT "")
 
-add_dependencies(examples basics io iterators barycenter properties)
+add_dependencies(examples basics io iterators barycenter properties
+                 uv_optimization)
 
 # Function to build Emscripten examples with optional preload files
 function(add_emscripten_example NAME SOURCE_FILES)

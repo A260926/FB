@@ -10,6 +10,7 @@ This project aims to adhere to [Semantic Versioning](https://semver.org/spec/v2.
 
 ### Added
 
+- Add `optimize_uv()` function reducing the symmetric Dirichlet distortion of an existing UV chart while keeping boundary loops and `v:uv_fixed` vertices fixed.
 - Add `find_duplicate_vertices()` function.
 - Add `analyze()` function.
 - Add `min_edge_length()` function.
