@@ -1093,6 +1093,9 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
 #else
     const size_t vertCount = meshSource->vertices.size();
     transformedVertices.resize(vertCount);
+    // Affine/mirrored placements exist only with instancing; the ordinary
+    // path always treats its authored winding as front-facing.
+    const bool mirror = false;
 #endif // JET_MESH_INSTANCING
 
     Vector3 camPos(camera->position);
@@ -1213,7 +1216,11 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         const size_t vertCount=meshSource->vertices.size();
         transformedVertices.resize(vertCount);
         float composed[9], translated[3];
+        float instanceNormals[9];
         const float* matrix=baseM; const float* translation=baseT;
+        const float* normalMatrix=baseM;
+        bool affineNormals=false;
+        bool mirror=false;
         if (instance) {
             const auto& t=instance->transform; const float* m=t.basis;
             float billboardM[9];
@@ -1233,6 +1240,37 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
                 translated[row]=parent[row*3]*t.position.x+parent[row*3+1]*t.position.y+parent[row*3+2]*t.position.z+baseT[row];
             }
             matrix=composed; translation=translated;
+
+            // Classify the placement. Trig-built rotations are orthonormal to
+            // within a few 1e-3; anything further from that is a genuine
+            // scale/shear and needs the inverse-transpose normal transform.
+            const double a=m[0],b=m[1],c=m[2],d=m[3],e=m[4],f=m[5],g=m[6],h=m[7],i=m[8];
+            double gramError=0.0;
+            const double cols[9]={a,d,g, b,e,h, c,f,i}; // column vectors of A
+            for (int row=0;row<3;++row) for (int col=0;col<3;++col) {
+                const double v=cols[row*3]*cols[col*3] + cols[row*3+1]*cols[col*3+1] + cols[row*3+2]*cols[col*3+2];
+                gramError=std::max(gramError,std::abs(v-(row==col?1.0:0.0)));
+            }
+            const bool orthogonal=gramError<=0.02;
+            const double det=a*(e*i-f*h)-b*(d*i-f*g)+c*(d*h-e*g);
+            mirror=det<0.0;
+            if (orthogonal) {
+                // Legacy rigid path: preserve the exact arithmetic and output
+                // of the original implementation (inverse-transpose == basis).
+                for (int row=0;row<3;++row) for (int col=0;col<3;++col)
+                    instanceNormals[row*3+col]=baseM[row*3]*m[col]+baseM[row*3+1]*m[3+col]+baseM[row*3+2]*m[6+col];
+            } else {
+                affineNormals=true;
+                // Normals transform by the inverse transpose. parent is a
+                // rotation, so R * A^{-T}. A^{-T} is the cofactor matrix / det.
+                const double inv[9]={
+                    ( e*i-f*h)/det, -(d*i-f*g)/det, ( d*h-e*g)/det,
+                    -(b*i-c*h)/det, ( a*i-c*g)/det, -(a*h-b*g)/det,
+                    ( b*f-c*e)/det, -(a*f-c*d)/det, ( a*e-b*d)/det};
+                for (int row=0;row<3;++row) for (int col=0;col<3;++col)
+                    instanceNormals[row*3+col]=baseM[row*3]*inv[col]+baseM[row*3+1]*inv[3+col]+baseM[row*3+2]*inv[6+col];
+            }
+            normalMatrix=instanceNormals;
         }
         const float fM00=matrix[0], fM01=matrix[1], fM02=matrix[2];
         const float fM10=matrix[3], fM11=matrix[4], fM12=matrix[5];
@@ -1248,17 +1286,10 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
 #endif // JET_MESH_INSTANCING
 #if LIGHTING
 #if JET_MESH_INSTANCING
-    // Ordinary billboard normals retain their authored orientation. Match
-    // that convention for instances: apply the instance rotation, excluding
-    // the camera-facing yaw used only by billboard positions above.
-    float billboardNormals[9];
-    const float* normalMatrix=matrix;
-    if (isBillboard && instance) {
-        const float* m=instance->transform.basis;
-        for (int row=0;row<3;++row) for (int col=0;col<3;++col)
-            billboardNormals[row*3+col]=baseM[row*3]*m[col]+baseM[row*3+1]*m[3+col]+baseM[row*3+2]*m[6+col];
-        normalMatrix=billboardNormals;
-    }
+    // The instance normal matrix is prepared above: rigid placements keep the
+    // legacy combined rotation (excluding the billboard yaw, as before), while
+    // scaled/sheared/mirrored placements use R * A^{-T} and renormalise per
+    // vertex so lighting stays perpendicular to the transformed surface.
 #endif // JET_MESH_INSTANCING
     // Object-local lighting precompute eligibility.
     //
@@ -1339,6 +1370,23 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         if (allNonSpecular) {
             objectLocalLight = true;
             objLightIntensity = directionalLight->intensity;
+#if JET_MESH_INSTANCING
+            // For a genuinely affine placement the inverse-transpose normal
+            // transform is an extra per-vertex step whose only consumer is the
+            // Lambert precompute. Disabling the precompute here keeps a
+            // scaled/sheared/mirrored instance on the same geometric
+            // understanding of its normals as the vertex-transformed and
+            // specular paths: N comes from the prototype normal through
+            // A^{-T}, renormalised, in both cases.
+            if (affineNormals) objectLocalLight = false;
+#endif
+        }
+#if JET_MESH_INSTANCING
+        if (affineNormals) {
+            // skip the owner-local light precompute setup below entirely
+        } else
+#endif
+        if (objectLocalLight) {
             // Diffuse coef varies per triangle; we use the first triangle's
             // material as a representative. If diffuse coefs were ever
             // mixed across an object's faces, GOURAUD-style midtones
@@ -1370,11 +1418,26 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
 #if JET_MESH_INSTANCING
             }
             if (instance) {
+                // Continue into mesh-local space. The instance basis maps mesh
+                // normals to owner-local space, so the light direction needs
+                // its inverse-transpose to be dotted against the raw prototype
+                // normal. For a rigid placement that is exactly the transpose
+                // (previous behaviour). For scale/shear, normalising keeps the
+                // Lambert cosine correct; a mirror leaves the direction alone
+                // in sign because both N and L live in the mirrored frame.
                 const Vector3 L=objLightDir;
                 const float* m=instance->transform.basis;
-                objLightDir={(int32_t)(m[0]*L.x+m[3]*L.y+m[6]*L.z),
-                             (int32_t)(m[1]*L.x+m[4]*L.y+m[7]*L.z),
-                             (int32_t)(m[2]*L.x+m[5]*L.y+m[8]*L.z)};
+                float lx=(float)(m[0]*L.x+m[3]*L.y+m[6]*L.z);
+                float ly=(float)(m[1]*L.x+m[4]*L.y+m[7]*L.z);
+                float lz=(float)(m[2]*L.x+m[5]*L.y+m[8]*L.z);
+                if (affineNormals) {
+                    const double len=std::sqrt(double(lx)*lx+double(ly)*ly+double(lz)*lz);
+                    if (len>0.0) {
+                        const double s=FIXED_POINT_SCALE/len;
+                        lx=(float)(lx*s); ly=(float)(ly*s); lz=(float)(lz*s);
+                    }
+                }
+                objLightDir={(int32_t)lx,(int32_t)ly,(int32_t)lz};
 #endif // JET_MESH_INSTANCING
             }
         }
@@ -1451,12 +1514,24 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
         // from the untransformed mesh-local normal below.
         if (!objectLocalLight) {
             const float fnx = (float)normal.x, fny = (float)normal.y, fnz = (float)normal.z;
-            normal.assign(
 #if JET_MESH_INSTANCING
-                (int32_t)(fnx * normalMatrix[0] + fny * normalMatrix[1] + fnz * normalMatrix[2]),
-                (int32_t)(fnx * normalMatrix[3] + fny * normalMatrix[4] + fnz * normalMatrix[5]),
-                (int32_t)(fnx * normalMatrix[6] + fny * normalMatrix[7] + fnz * normalMatrix[8]));
+            float wx = fnx * normalMatrix[0] + fny * normalMatrix[1] + fnz * normalMatrix[2];
+            float wy = fnx * normalMatrix[3] + fny * normalMatrix[4] + fnz * normalMatrix[5];
+            float wz = fnx * normalMatrix[6] + fny * normalMatrix[7] + fnz * normalMatrix[8];
+            if (affineNormals) {
+                // A scale/shear/mirror makes the inverse-transpose non-orthonormal
+                // (and the mirror may even flip the vector), so restore the
+                // prototype's FIXED_POINT_SCALE magnitude and keep the sign the
+                // basis maps the normal to. Zero-length stays zero (no consumer).
+                const double len = std::sqrt(double(wx)*wx + double(wy)*wy + double(wz)*wz);
+                if (len > 0.0) {
+                    const double s = FIXED_POINT_SCALE / len;
+                    wx = (float)(wx * s); wy = (float)(wy * s); wz = (float)(wz * s);
+                }
+            }
+            normal.assign((int32_t)wx, (int32_t)wy, (int32_t)wz);
 #else
+            normal.assign(
                 (int32_t)(fnx * fM00 + fny * fM01 + fnz * fM02),
                 (int32_t)(fnx * fM10 + fny * fM11 + fnz * fM12),
                 (int32_t)(fnx * fM20 + fny * fM21 + fnz * fM22));
@@ -1663,10 +1738,18 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
                                (int64_t)b.position.x * (c.position.y - a.position.y) +
                                (int64_t)c.position.x * (a.position.y - b.position.y);
 
+        // A negative-determinant placement projects every triangle with the
+        // opposite winding. Reversing the two non-anew vertices here is
+        // exactly what an explicitly expanded reference does (and what keeps
+        // the prototype's authored front face front). The mirror flag simply
+        // flips the shoelace sign used for the cull test; everything below
+        // then follows the ordinary rules.
+        const int64_t facingArea = mirror ? -shoelaceArea : shoelaceArea;
+
         bool shouldCull = false;
         switch (cullingMode) {
-            case CullingMode::CULL_BACKFACES: shouldCull = (shoelaceArea <= 0); break;
-            case CullingMode::CULL_FRONTFACES: shouldCull = (shoelaceArea >= 0); break;
+            case CullingMode::CULL_BACKFACES: shouldCull = (facingArea <= 0); break;
+            case CullingMode::CULL_FRONTFACES: shouldCull = (facingArea >= 0); break;
             case CullingMode::NO_CULLING: break;
         }
         if (shouldCull) return;
@@ -1681,14 +1764,17 @@ void PERF_CRITICAL Scene::renderObject(Object* obj,
              mat->shadingMode != ShadingMode::ADDITIVE);
         if (usesNormals) {
             rt.normalIndex = uint32_t(normalQueue.size());
-            const bool flip = cullingMode == CullingMode::NO_CULLING && shoelaceArea < 0;
+            const bool flip = cullingMode == CullingMode::NO_CULLING && facingArea < 0;
             normalQueue.push_back(flip ? TriangleNormals{c.normal, b.normal, a.normal,
                 c.lambertBrightness, b.lambertBrightness, a.lambertBrightness}
                                       : TriangleNormals{a.normal, b.normal, c.normal,
                 a.lambertBrightness, b.lambertBrightness, c.lambertBrightness});
         }
 #endif
-        const bool reverse = cullingMode == CullingMode::NO_CULLING && shoelaceArea < 0;
+        // Mirroring reverses the authored vertex order too, matching the
+        // expanded reference exactly; NO_CULLING additionally reverses any
+        // back-facing triangle just as for ordinary objects.
+        const bool reverse = (cullingMode == CullingMode::NO_CULLING && facingArea < 0) != mirror;
         if (reverse) {
             rt.v1.assign(c); rt.v2.assign(b); rt.v3.assign(a);
         } else {

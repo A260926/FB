@@ -17,6 +17,31 @@ namespace Renderer
     }
 
 #if JET_MESH_INSTANCING
+    namespace {
+        // A placement must be a finite, invertible affine map. A zero or tiny
+        // determinant would collapse the mesh to a plane/line/point, making
+        // positions and inverse-transpose normals undefined, so such bases are
+        // rejected at insertion/update time rather than being drawn.
+        bool finiteBasis(const float* m) {
+            for (int i=0;i<9;++i) if (!std::isfinite(m[i])) return false;
+            return true;
+        }
+        bool invertibleBasis(const float* m) {
+            const double a=m[0],b=m[1],c=m[2],d=m[3],e=m[4],f=m[5],g=m[6],h=m[7],i=m[8];
+            const double det = a*(e*i-f*h) - b*(d*i-f*g) + c*(d*h-e*g);
+            // "Finite and invertible" in a fixed-point renderer has to mean
+            // numerically usable, not merely nonzero: require the scaled
+            // determinant to stay well above float noise.
+            const double scale = std::max({std::abs(a),std::abs(b),std::abs(c),
+                                           std::abs(d),std::abs(e),std::abs(f),
+                                           std::abs(g),std::abs(h),std::abs(i), 1e-30});
+            return std::isfinite(det) && std::abs(det) > scale*scale*scale*1e-6;
+        }
+        bool validTransform(const Object::InstanceTransform& t) {
+            return finiteBasis(t.basis) && invertibleBasis(t.basis);
+        }
+    }
+
     Object::InstanceTransform Object::InstanceTransform::rotated(const Vector3& degrees, const Vector3& position) {
         // Poses can be authored before the first Scene initializes the tables.
         if (sin_table[90] == 0) initializeTrigTables();
@@ -44,7 +69,22 @@ namespace Renderer
                              TriangleMaterials triangleMaterials) {
         if (!mesh || mesh.get()==this || !mesh->instances.empty()) return false;
         if (triangleMaterials && triangleMaterials->size()!=mesh->triangles.size()) return false;
+        // Reject bad placements before mutating anything so a failed call
+        // leaves the existing batch untouched.
+        if (!validTransform(transform)) return false;
         instances.push_back({std::move(mesh),transform,materialOverride,std::move(triangleMaterials)});
+        return true;
+    }
+
+    bool Object::setInstanceTransform(size_t index, const InstanceTransform& transform) {
+        if (index >= instances.size()) return false;
+        if (!validTransform(transform)) return false;
+        instances[index].transform = transform;
+        // The caller updates between frames; refresh the batch bounds now so
+        // the next prepareFrame() sees the new placement without a manual
+        // calculateBoundingBox(). Prototype geometry and its position cache
+        // are untouched — only the owner's own AABB is recomputed.
+        calculateBoundingBox();
         return true;
     }
 

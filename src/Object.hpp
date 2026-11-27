@@ -66,9 +66,17 @@ public:
     };
 #if JET_MESH_INSTANCING
 
-    /// Rigid mesh-local to object-local transform. Matrix rows act on column
+    /// Mesh-local to object-local transform. Matrix rows act on column
     /// vectors; translation uses the same integer units as vertex positions.
-    /// Supply an orthonormal matrix (rotation/reflection), not a scale/shear.
+    /// Any finite, invertible affine basis is accepted: non-uniform scale,
+    /// shear and mirroring (a negative determinant) are all valid. Positions
+    /// map as `basis * p + position`. Normals are transformed by the inverse
+    /// transpose and renormalised, so a scaled or sheared placement keeps its
+    /// lighting perpendicular to the transformed surface. A mirror must not
+    /// swap a material's front and back faces; the renderer compensates for
+    /// the winding reversal so the prototype's authored front face remains
+    /// front under every CullingMode. `rotated()` keeps producing a rigid
+    /// rotation for callers that only need the legacy orthogonal path.
     struct InstanceTransform {
         float basis[9] = {1,0,0, 0,1,0, 0,0,1};
         Vector3 position = {0,0,0};
@@ -93,11 +101,20 @@ public:
     /// Instances render after this object's own triangles, in insertion order.
     /// They inherit its transform, culling, fade, LOD and depth flags. Visibility
     /// is tested for the whole batch; keep spatially distant batches separate.
+    /// Non-finite or singular bases are rejected without touching this object.
     /// Call calculateBoundingBox() after changing placements or adding instances.
     /// The same mesh can be retained by any number of independently placed
     /// Objects or by several instances within one Object.
     bool addInstance(SharedMesh mesh, const InstanceTransform& transform,
                      Material* materialOverride = nullptr, TriangleMaterials triangleMaterials = {});
+    /// Replace an existing placement's transform. Intended for use after the
+    /// previous frame has finished drawing and before the next prepareFrame():
+    /// the next prepareFrame() uses the new placement and the batch bounds are
+    /// refreshed in place (no manual calculateBoundingBox() and no prototype
+    /// rebuilding). Returns false for an out-of-range index or a non-finite or
+    /// singular basis; in that case the existing placement, batch bounds and
+    /// material bindings are left exactly as they were.
+    bool setInstanceTransform(size_t index, const InstanceTransform& transform);
     size_t vertexCount() const;
     size_t triangleCount() const;
 #endif // JET_MESH_INSTANCING
