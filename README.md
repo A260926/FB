@@ -90,3 +90,33 @@ History
 
 2006/08/25 - v1.0
   * First release
+
+Bounded read-only heap audit
+----------------------------
+`tlsf_check()` / `tlsf_check_pool()` assume a trustworthy heap: if a size field
+or a free-list link is corrupted, walking the structure can read out of bounds,
+trip an assertion, or loop forever. For diagnosing a stopped process whose
+mapped ranges are still known, `tlsf_audit()` provides a bounded, strictly
+read-only audit:
+
+  * The caller passes the readable control range and every pool's base/byte
+    count. A pointer found in (possibly corrupted) heap contents is proven to
+    lie fully inside one of those ranges before it is dereferenced, and all
+    offset arithmetic is overflow-checked, so a bad link is reported rather
+    than followed. The first block's out-of-pool `prev_phys_block` word is
+    never read.
+  * Each pool's physical blocks are checked (in caller order) for size,
+    alignment, prev-free flags, back-links, coalescing of adjacent free
+    blocks, and the end sentinel; then the two-level bitmaps and free lists
+    are checked (in bucket order). Only blocks the physical scan proved free,
+    plus the shared null node, may be free-list targets.
+  * Runs never allocate; the caller supplies scratch workspace sized by
+    `tlsf_audit_workspace_size()`, and an undersized workspace returns
+    `TLSF_AUDIT_ENOSPC`. The four outcomes (OK, CORRUPT, EINVAL, ENOSPC) are
+    distinct; a CORRUPT report carries a category, pool/control region, pool
+    index, and relative offset. The audit is not O(1).
+
+This verifies structural integrity only: it cannot decide whether an arbitrary
+user pointer is valid, and a heap reported as corrupt must not be used for
+further allocation. See the declarations and contract comments in `tlsf.h`,
+and the corruption-injection / guard-page tests in `checks/audit_contract.c`.

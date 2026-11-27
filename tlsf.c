@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1261,4 +1262,995 @@ void* tlsf_realloc(tlsf_t tlsf, void* ptr, size_t size)
 	}
 
 	return p;
+}
+
+
+/*
+** Bounded, read-only heap audit.
+**
+** Everything below works from caller-supplied ranges rather than from any
+** global heap state. A pointer found in corrupted memory is never dereferenced
+** until its address has been proven to lie fully inside one of the ranges;
+** all pointer/offset arithmetic is checked for size_t wrap. The routine never
+** writes through any pointer into the audited memory.
+*/
+
+/* A fully-validated, half-open byte range [lo, hi) inside the caller's map. */
+typedef struct audit_range_t
+{
+	unsigned char* lo;
+	unsigned char* hi;
+} audit_range_t;
+
+/* Per-pool audit state. `map` is exactly the readable range the caller named
+** ([pool_base, pool_base + bytes)); first_header is pool_base minus one word,
+** the address TLSF uses for the first block whose prev_phys field lives
+** outside the mapping and is never dereferenced. */
+typedef struct audit_pool_state_t
+{
+	audit_range_t map;                 /* exact caller-supplied readable bytes */
+	unsigned char* first_header;       /* pool_base - block_header_overhead */
+	unsigned char* expected_sentinel;  /* derived only from trusted descriptors */
+	size_t free_count;
+} audit_pool_state_t;
+
+typedef struct audit_ctx_t
+{
+	audit_range_t control;
+	const block_header_t* null_node;
+	audit_pool_state_t* pools;
+	size_t pool_count;
+	/* Flat free-block table and visit table, carved from caller workspace.
+	** Visit values: 0 = unseen, 1 = seen in an earlier bucket,
+	** 2 = on the current bucket's traversal chain. */
+	block_header_t** free_blocks;
+	size_t free_count;
+	size_t free_cap;
+	unsigned char* visited;
+	tlsf_audit_result_t* out;
+} audit_ctx_t;
+
+static void audit_fail(tlsf_audit_result_t* out,
+	tlsf_audit_corruption_t corruption, tlsf_audit_region_t region,
+	int pool_index, size_t offset, const char* detail)
+{
+	if (out)
+	{
+		out->status = TLSF_AUDIT_CORRUPT;
+		out->corruption = corruption;
+		out->region = region;
+		out->pool_index = pool_index;
+		out->offset = offset;
+		out->detail = detail;
+	}
+}
+
+static int audit_add_wraps(size_t a, size_t b)
+{
+	return a > (size_t)-1 - b;
+}
+
+static int audit_sub_wraps(size_t a, size_t b)
+{
+	return b > a;
+}
+
+/* True exactly when [lo, lo+len) is a sub-range of r, with wrap checks. */
+static int audit_range_contains(const audit_range_t* r,
+	const unsigned char* lo, size_t len)
+{
+	size_t off;
+	if (lo < r->lo || lo >= r->hi)
+	{
+		return 0;
+	}
+	off = tlsf_cast(size_t, lo - r->lo);
+	if (audit_add_wraps(off, len) ||
+		off + len > tlsf_cast(size_t, r->hi - r->lo))
+	{
+		return 0;
+	}
+	return 1;
+}
+
+/* True when two validated ranges share any byte. Touching endpoints is fine. */
+static int audit_ranges_overlap(const audit_range_t* a, const audit_range_t* b)
+{
+	return a->lo < b->hi && b->lo < a->hi;
+}
+
+/* Validate a raw (base, bytes) pair into a half-open range. */
+static int audit_make_range(audit_range_t* r, const void* base, size_t bytes)
+{
+	unsigned char* lo = tlsf_cast(unsigned char*, tlsf_cast(uintptr_t, base));
+	if (!base || bytes == 0)
+	{
+		return 0;
+	}
+	if (tlsf_cast(uintptr_t, lo) + bytes < tlsf_cast(uintptr_t, lo))
+	{
+		return 0;
+	}
+	r->lo = lo;
+	r->hi = lo + bytes;
+	return 1;
+}
+
+static int audit_ptr_aligned(const void* p, size_t align)
+{
+	return (tlsf_cast(uintptr_t, p) & (align - 1)) == 0;
+}
+
+/*
+** Validate a free-list target. The shared null node is the only permitted
+** control-area target; every other target must be a pool block whose size and
+** link fields (everything after the prev_phys word) lie fully inside that
+** pool's mapped bytes. The prev_phys word of the first block sits outside the
+** mapping and is never part of this window. Returns -1 for the null node, -2
+** when the target is not fully readable, otherwise the owning pool index.
+*/
+static int audit_locate_block(const audit_ctx_t* ctx, const block_header_t* block)
+{
+	const unsigned char* fields;
+	size_t i;
+	if (block == ctx->null_node)
+	{
+		return -1;
+	}
+	/* Readable fields are size/next_free/prev_free, starting after prev_phys. */
+	fields = tlsf_cast(const unsigned char*, block) + sizeof(void*);
+	for (i = 0; i < ctx->pool_count; ++i)
+	{
+		if (audit_range_contains(&ctx->pools[i].map, fields,
+			sizeof(block_header_t) - sizeof(void*)))
+		{
+			return tlsf_cast(int, i);
+		}
+	}
+	return -2;
+}
+
+/*
+** Look a free-list link target up in the blocks the physical scan proved
+** free. The shared null node is the only permitted control-area target; any
+** other aligned control address is rejected as an impostor.
+*/
+static int audit_find_free_block(const audit_ctx_t* ctx, const block_header_t* block)
+{
+	size_t i;
+	if (block == ctx->null_node)
+	{
+		return -1;
+	}
+	for (i = 0; i < ctx->free_count; ++i)
+	{
+		if (ctx->free_blocks[i] == block)
+		{
+			return tlsf_cast(int, i);
+		}
+	}
+	return -2;
+}
+
+static size_t audit_pool_block_offset(const audit_pool_state_t* ps,
+	const block_header_t* block)
+{
+	return tlsf_cast(size_t,
+		tlsf_cast(const unsigned char*, block) - ps->first_header);
+}
+
+/*
+** Physical sweep of one pool. Walks block headers using only validated,
+** wrap-checked advancement, verifies flags/back-links/coalescing/sentinel,
+** and records every free block in the context-wide table for list checks.
+*/
+static tlsf_audit_status_t audit_scan_pool(audit_ctx_t* ctx, size_t pool_index)
+{
+	audit_pool_state_t* ps = &ctx->pools[pool_index];
+	const unsigned char* base = ps->map.lo;
+	block_header_t* block =
+		tlsf_cast(block_header_t*, tlsf_cast(void*, ps->first_header));
+	block_header_t* prev = 0;
+	int prev_free = 0;
+	int is_first = 1;
+
+	/*
+	** The first block's header pointer is base minus one word. Its
+	** prev_phys_block field occupies that out-of-pool word and is never read;
+	** its size word begins exactly at base, inside the mapped bytes.
+	*/
+	if (!audit_range_contains(&ps->map, base, sizeof(size_t)))
+	{
+		audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_TRUNCATED,
+			TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index), 0,
+			"first block size word is outside the supplied pool range");
+		return TLSF_AUDIT_CORRUPT;
+	}
+	if (block_is_prev_free(block))
+	{
+		audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_PREV_FLAG,
+			TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index), 0,
+			"first pool block must mark its predecessor as used");
+		return TLSF_AUDIT_CORRUPT;
+	}
+
+	for (;;)
+	{
+		size_t raw_size;
+		size_t size;
+		size_t block_off;
+		block_header_t* next;
+		size_t step;
+		/* The size word always sits one word past the header pointer. */
+		unsigned char* size_word =
+			tlsf_cast(unsigned char*, block) + sizeof(void*);
+
+		if (!audit_ptr_aligned(block, ALIGN_SIZE))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BLOCK_ALIGN,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				tlsf_cast(size_t,
+					tlsf_cast(unsigned char*, block) - ps->first_header),
+				"block header is not aligned to tlsf_align_size()");
+			return TLSF_AUDIT_CORRUPT;
+		}
+		block_off = tlsf_cast(size_t,
+			tlsf_cast(unsigned char*, block) - ps->first_header);
+
+		/* The size word must be inside the mapped range before it is read. */
+		if (!audit_range_contains(&ps->map, size_word, sizeof(size_t)))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_TRUNCATED,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index), block_off,
+				"block size word falls outside the supplied pool range");
+			return TLSF_AUDIT_CORRUPT;
+		}
+
+		raw_size = block->size;
+		size = block_size(block);
+
+		if (size == 0)
+		{
+			/*
+			** Sentinel: a zero-size used block. Its position is computed from
+			** the trusted descriptor, never from corrupted contents, so a bad
+			** chain cannot make us accept a sentinel in the middle of a pool.
+			*/
+			if (tlsf_cast(unsigned char*, block) != ps->expected_sentinel)
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_SENTINEL,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off,
+					"zero-size block is not at the expected end sentinel position");
+				return TLSF_AUDIT_CORRUPT;
+			}
+			if (block_is_free(block))
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_SENTINEL,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off, "sentinel block must be marked used");
+				return TLSF_AUDIT_CORRUPT;
+			}
+			if (!block_is_prev_free(block))
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_SENTINEL,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off, "sentinel block must mark its predecessor free");
+				return TLSF_AUDIT_CORRUPT;
+			}
+			if (ps->free_count == 0)
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_SENTINEL,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off, "pool has no free block before the sentinel");
+				return TLSF_AUDIT_CORRUPT;
+			}
+			break;
+		}
+
+		/* Sizes are multiples of ALIGN_SIZE; the other low bits are reserved
+		** for the two documented status flags. */
+		if ((raw_size & (ALIGN_SIZE - 1)) &
+			~(block_header_free_bit | block_header_prev_free_bit))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BLOCK_SIZE,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "block size has reserved low bits set");
+			return TLSF_AUDIT_CORRUPT;
+		}
+		if (size < block_size_min)
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BLOCK_SIZE,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "block size is below the minimum block size");
+			return TLSF_AUDIT_CORRUPT;
+		}
+		if (size >= block_size_max)
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BLOCK_SIZE,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "block size reaches or exceeds the maximum block size");
+			return TLSF_AUDIT_CORRUPT;
+		}
+
+		/* Advance: next = block + block_start_offset + (size - overhead). */
+		if (audit_sub_wraps(size, block_header_overhead))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BLOCK_SIZE,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "block size wraps while computing the next block");
+			return TLSF_AUDIT_CORRUPT;
+		}
+		step = block_start_offset + (size - block_header_overhead);
+		if (audit_add_wraps(block_off, step))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BLOCK_SIZE,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "next block offset wraps the address space");
+			return TLSF_AUDIT_CORRUPT;
+		}
+		next = tlsf_cast(block_header_t*,
+			tlsf_cast(unsigned char*, block) + step);
+
+		/* The successor size word must be readable before it is trusted. */
+		if (!audit_range_contains(&ps->map,
+			tlsf_cast(unsigned char*, next) + sizeof(void*), sizeof(size_t)))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_TRUNCATED,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "block chain runs past the end of the pool range");
+			return TLSF_AUDIT_CORRUPT;
+		}
+
+		/* Prev-free flag must agree with the predecessor's actual state.
+		** block_is_prev_free() yields the raw bit value (0 or 2), so compare
+		** its truthiness against the normalized predecessor state. */
+		if (!!block_is_prev_free(block) != prev_free)
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_PREV_FLAG,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off,
+				"prev-free flag disagrees with the predecessor block state");
+			return TLSF_AUDIT_CORRUPT;
+		}
+
+		/* A free predecessor leaves its back-link in this block's header.
+		** The first block's predecessor is fictitious and its back-link word
+		** is outside the mapping, so it is skipped explicitly. For every other
+		** block the word is proven mapped before it is dereferenced. */
+		if (prev_free && !is_first)
+		{
+			if (!audit_range_contains(&ps->map,
+				tlsf_cast(const unsigned char*, block), sizeof(void*)))
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_TRUNCATED,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off,
+					"prev_phys_block word falls outside the pool range");
+				return TLSF_AUDIT_CORRUPT;
+			}
+			if (block->prev_phys_block != prev)
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_PREV_POINTER,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off,
+					"prev_phys_block does not point to the previous free block");
+				return TLSF_AUDIT_CORRUPT;
+			}
+		}
+
+		/* Adjacent free blocks must have been coalesced. */
+		if (prev_free && block_is_free(block))
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_COALESCE,
+				TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+				block_off, "two adjacent free blocks were not coalesced");
+			return TLSF_AUDIT_CORRUPT;
+		}
+
+		if (block_is_free(block))
+		{
+			/* The table was sized from the validated ranges; fail closed. */
+			if (ctx->free_count >= ctx->free_cap)
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_TRUNCATED,
+					TLSF_AUDIT_REGION_POOL, tlsf_cast(int, pool_index),
+					block_off, "free block table exhausted");
+				return TLSF_AUDIT_CORRUPT;
+			}
+			ctx->free_blocks[ctx->free_count++] = block;
+			ps->free_count++;
+		}
+
+		prev = block;
+		prev_free = block_is_free(block);
+		block = next;
+		is_first = 0;
+	}
+
+	return TLSF_AUDIT_OK;
+}
+
+/*
+** Free-list and bitmap checks. Every link target is range- and alignment-
+** checked before it is read, must be either the shared null node or a block
+** proven free by the physical scan, and traversal is bounded by the number of
+** physically free blocks so a cycle can never loop forever.
+*/
+static tlsf_audit_status_t audit_check_lists(audit_ctx_t* ctx)
+{
+	const control_t* control =
+		tlsf_cast(const control_t*, ctx->control.lo);
+	const size_t total_free = ctx->free_count;
+	size_t i, j;
+
+	/*
+	** The null node's identity is the single address &control->block_null:
+	** empty buckets must hold it and every list terminates at it. Its own
+	** next_free/prev_free fields are scratch space reused while lists are
+	** edited (they need not point at itself, and prev_free is shared across
+	** every bucket rather than marking any bucket's tail), so they are not
+	** treated as an invariant here.
+	*/
+
+	/* Stray bits above the implemented first-level indexes are always wrong. */
+	if (control->fl_bitmap & ~((1U << FL_INDEX_COUNT) - 1))
+	{
+		audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BITMAP,
+			TLSF_AUDIT_REGION_CONTROL, -1, offsetof(control_t, fl_bitmap),
+			"first-level bitmap has bits outside the implemented index range");
+		return TLSF_AUDIT_CORRUPT;
+	}
+
+	for (i = 0; i < FL_INDEX_COUNT; ++i)
+	{
+		const unsigned int fl_bit = control->fl_bitmap & (1U << i);
+		const unsigned int sl_map = control->sl_bitmap[i];
+
+		if (!fl_bit && sl_map != 0)
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BITMAP,
+				TLSF_AUDIT_REGION_CONTROL, -1,
+				offsetof(control_t, sl_bitmap) + i * sizeof(unsigned int),
+				"second-level bitmap set while first-level bit is clear");
+			return TLSF_AUDIT_CORRUPT;
+		}
+		if (fl_bit && sl_map == 0)
+		{
+			audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BITMAP,
+				TLSF_AUDIT_REGION_CONTROL, -1,
+				offsetof(control_t, fl_bitmap),
+				"first-level bitmap set with no second-level entries");
+			return TLSF_AUDIT_CORRUPT;
+		}
+
+		for (j = 0; j < SL_INDEX_COUNT; ++j)
+		{
+			const unsigned int sl_bit = sl_map & (1U << j);
+			const block_header_t* head = control->blocks[i][j];
+			const block_header_t* node;
+			size_t steps = 0;
+
+			if (!sl_bit)
+			{
+				if (head != ctx->null_node)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BITMAP,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"empty bucket must point at the shared null node");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				continue;
+			}
+			if (head == ctx->null_node)
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_BITMAP,
+					TLSF_AUDIT_REGION_CONTROL, -1,
+					offsetof(control_t, blocks)
+						+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+					"bitmap claims a bucket that points at the null node");
+				return TLSF_AUDIT_CORRUPT;
+			}
+
+			/* Retire the previous bucket's chain marks so a repeat inside
+			** this bucket reads as a cycle, not a cross-bucket duplicate. */
+			for (size_t k = 0; k < total_free; ++k)
+			{
+				if (ctx->visited[k] == 2)
+				{
+					ctx->visited[k] = 1;
+				}
+			}
+
+			node = head;
+			while (node != ctx->null_node)
+			{
+				int idx;
+				int fli, sli;
+				const block_header_t* next_link;
+				const block_header_t* prev_link;
+				int pool_idx;
+				size_t node_off;
+				tlsf_audit_region_t node_region;
+
+				if (++steps > total_free)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_CYCLE,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"free-list traversal exceeded the number of free blocks");
+					return TLSF_AUDIT_CORRUPT;
+				}
+
+				/* Prove the target is aligned and fully mapped before reading. */
+				if (!audit_ptr_aligned(node, ALIGN_SIZE))
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_ALIGN,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"free-list target is not aligned to tlsf_align_size()");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				pool_idx = audit_locate_block(ctx, node);
+				if (pool_idx < -1)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_TARGET,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"free-list target lies outside every supplied range");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				idx = audit_find_free_block(ctx, node);
+				if (idx == -2)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_TARGET,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"free-list target is not a proven free block "
+						"or is a control-area null impostor");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				if (ctx->visited[idx] == 2)
+				{
+					/* Reached again inside this same bucket chain: a cycle. */
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_CYCLE,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"free list loops back to a block already on its chain");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				if (ctx->visited[idx] == 1)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_DUPLICATE,
+						TLSF_AUDIT_REGION_CONTROL, -1,
+						offsetof(control_t, blocks)
+							+ (i * SL_INDEX_COUNT + j) * sizeof(void*),
+						"free block appears more than once in the free lists");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				ctx->visited[idx] = 2;
+
+				/* Resolve reporting coordinates for this mapped node. */
+				if (pool_idx >= 0)
+				{
+					node_region = TLSF_AUDIT_REGION_POOL;
+					node_off = audit_pool_block_offset(&ctx->pools[pool_idx], node);
+				}
+				else
+				{
+					node_region = TLSF_AUDIT_REGION_CONTROL;
+					node_off = tlsf_cast(size_t,
+						tlsf_cast(const unsigned char*, node) - ctx->control.lo);
+				}
+
+				/* The block size must map to the bucket it was found in.
+				** Physical validation already bounded the size, so the index
+				** arithmetic used by the allocator stays in range. */
+				mapping_insert(block_size(node), &fli, &sli);
+				if (fli != tlsf_cast(int, i) || sli != tlsf_cast(int, j))
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_WRONG_BUCKET,
+						node_region, pool_idx >= 0 ? pool_idx : -1, node_off,
+						"free block size does not map to its free-list bucket");
+					return TLSF_AUDIT_CORRUPT;
+				}
+
+				/* Links are read only after the node itself is proven. */
+				next_link = node->next_free;
+				prev_link = node->prev_free;
+
+				if (!audit_ptr_aligned(next_link, ALIGN_SIZE) ||
+					!audit_ptr_aligned(prev_link, ALIGN_SIZE))
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_ALIGN,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, next_free),
+						"free-list link value is misaligned");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				if (audit_locate_block(ctx, next_link) < -1 ||
+					audit_locate_block(ctx, prev_link) < -1)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_TARGET,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, next_free),
+						"free-list link points outside every supplied range");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				if (audit_find_free_block(ctx, next_link) == -2 ||
+					audit_find_free_block(ctx, prev_link) == -2)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_TARGET,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, next_free),
+						"free-list link does not target a free block or the null node");
+					return TLSF_AUDIT_CORRUPT;
+				}
+
+				/* A successor already on this chain closes a cycle. Detect it
+				** before the reciprocity checks, which would otherwise mislabel
+				** the same corruption as a generic broken link. */
+				if (next_link != ctx->null_node)
+				{
+					int next_idx = audit_find_free_block(ctx, next_link);
+					if (next_idx >= 0 && ctx->visited[next_idx] == 2)
+					{
+						audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_CYCLE,
+							node_region, pool_idx >= 0 ? pool_idx : -1,
+							node_off + offsetof(block_header_t, next_free),
+							"free list next link loops back onto its own chain");
+						return TLSF_AUDIT_CORRUPT;
+					}
+				}
+
+				/* Head nodes carry the shared null node as their prev link. */
+				if (node == head && prev_link != ctx->null_node)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_LINK,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, prev_free),
+						"free-list head must have the null node as its prev link");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				/* Interior nodes must link back to a real predecessor. */
+				if (node != head && prev_link == ctx->null_node)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_LINK,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, prev_free),
+						"interior free block must not use the null node as prev");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				/* Reciprocal links for real successors and interior nodes. */
+				if (next_link != ctx->null_node &&
+					next_link->prev_free != node)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_LINK,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, next_free),
+						"next free block does not link back to this block");
+					return TLSF_AUDIT_CORRUPT;
+				}
+				if (node != head && prev_link != ctx->null_node &&
+					prev_link->next_free != node)
+				{
+					audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_LINK,
+						node_region, pool_idx >= 0 ? pool_idx : -1,
+						node_off + offsetof(block_header_t, prev_free),
+						"previous free block does not link forward to this block");
+					return TLSF_AUDIT_CORRUPT;
+				}
+
+				node = next_link;
+			}
+		}
+	}
+
+	/* Every physically free block must have been visited exactly once. */
+	for (i = 0; i < total_free; ++i)
+	{
+		const block_header_t* block = ctx->free_blocks[i];
+		if (!ctx->visited[i])
+		{
+			int pool_idx = audit_locate_block(ctx, block);
+			if (pool_idx >= 0)
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_MISSING,
+					TLSF_AUDIT_REGION_POOL, pool_idx,
+					audit_pool_block_offset(&ctx->pools[pool_idx], block),
+					"physically free block is missing from every free list");
+			}
+			else
+			{
+				audit_fail(ctx->out, TLSF_AUDIT_CORRUPT_LIST_MISSING,
+					TLSF_AUDIT_REGION_CONTROL, -1,
+					tlsf_cast(size_t, tlsf_cast(const unsigned char*, block)
+						- ctx->control.lo),
+					"physically free block is missing from every free list");
+			}
+			return TLSF_AUDIT_CORRUPT;
+		}
+	}
+
+	return TLSF_AUDIT_OK;
+}
+
+size_t tlsf_audit_workspace_size(size_t pool_count, size_t total_pool_bytes)
+{
+	/*
+	** Upper bound on physical blocks: each real block advances at least
+	** block_start_offset + block_size_min bytes, and every pool contributes
+	** one sentinel, so total/per_block + pool_count rows always suffice.
+	*/
+	const size_t per_block = block_start_offset + block_size_min;
+	size_t max_blocks;
+	size_t bytes;
+
+	if (pool_count == 0)
+	{
+		return sizeof(audit_pool_state_t);
+	}
+	max_blocks = (total_pool_bytes / per_block) + pool_count;
+	bytes = pool_count * sizeof(audit_pool_state_t);
+	if (audit_add_wraps(bytes, max_blocks * sizeof(block_header_t*)) ||
+		audit_add_wraps(bytes, max_blocks * sizeof(unsigned char)))
+	{
+		return (size_t)-1;
+	}
+	bytes += max_blocks * sizeof(block_header_t*);
+	bytes += max_blocks * sizeof(unsigned char);
+	return bytes;
+}
+
+tlsf_audit_status_t tlsf_audit(
+	const void* control, size_t control_bytes,
+	const tlsf_audit_pool_t* pools, size_t pool_count,
+	void* workspace, size_t workspace_bytes,
+	tlsf_audit_result_t* result)
+{
+	audit_ctx_t ctx;
+	audit_pool_state_t* states;
+	block_header_t** free_table;
+	unsigned char* visited;
+	size_t i, cursor, total_pool_bytes, needed, max_blocks, per_block;
+	unsigned char* control_lo;
+
+	if (result)
+	{
+		result->status = TLSF_AUDIT_OK;
+		result->corruption = TLSF_AUDIT_CORRUPT_NONE;
+		result->region = TLSF_AUDIT_REGION_CONTROL;
+		result->pool_index = -1;
+		result->offset = 0;
+		result->detail = "audit passed";
+	}
+
+	/* Descriptor validation: nothing in the heap is trusted at this point. */
+	if (!audit_make_range(&ctx.control, control, control_bytes) ||
+		!audit_ptr_aligned(control, ALIGN_SIZE) ||
+		control_bytes < sizeof(control_t))
+	{
+		if (result)
+		{
+			result->status = TLSF_AUDIT_EINVAL;
+			result->detail = "control range is null, misaligned, or too small";
+		}
+		return TLSF_AUDIT_EINVAL;
+	}
+	control_lo = tlsf_cast(unsigned char*, tlsf_cast(void*, control));
+	ctx.control.lo = control_lo;
+	ctx.control.hi = control_lo + control_bytes;
+
+	if (pool_count > 0 && !pools)
+	{
+		if (result)
+		{
+			result->status = TLSF_AUDIT_EINVAL;
+			result->detail = "pool descriptor array is null";
+		}
+		return TLSF_AUDIT_EINVAL;
+	}
+	if (pool_count > (size_t)-1 / sizeof(audit_pool_state_t))
+	{
+		if (result)
+		{
+			result->status = TLSF_AUDIT_EINVAL;
+			result->detail = "pool count is implausibly large";
+		}
+		return TLSF_AUDIT_EINVAL;
+	}
+	if (workspace_bytes > 0 && !workspace)
+	{
+		if (result)
+		{
+			result->status = TLSF_AUDIT_EINVAL;
+			result->detail = "workspace size given but workspace is null";
+		}
+		return TLSF_AUDIT_EINVAL;
+	}
+
+	total_pool_bytes = 0;
+	for (i = 0; i < pool_count; ++i)
+	{
+		if (!pools[i].base || pools[i].bytes == 0)
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->region = TLSF_AUDIT_REGION_POOL;
+				result->pool_index = tlsf_cast(int, i);
+				result->detail = "pool base is null or pool size is zero";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		if (!audit_ptr_aligned(pools[i].base, ALIGN_SIZE))
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->region = TLSF_AUDIT_REGION_POOL;
+				result->pool_index = tlsf_cast(int, i);
+				result->detail = "pool base is not aligned to tlsf_align_size()";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		if (pools[i].bytes < tlsf_pool_overhead() + block_size_min)
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->region = TLSF_AUDIT_REGION_POOL;
+				result->pool_index = tlsf_cast(int, i);
+				result->detail = "pool range is too small for one minimum block";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		if (audit_add_wraps(total_pool_bytes, pools[i].bytes))
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->detail = "total pool size wraps size_t";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		total_pool_bytes += pools[i].bytes;
+	}
+
+	/* Carve the caller workspace: states, flat free table, visit table. */
+	per_block = block_start_offset + block_size_min;
+	max_blocks = (total_pool_bytes / per_block) + pool_count;
+	needed = pool_count * sizeof(audit_pool_state_t);
+	if (audit_add_wraps(needed, max_blocks * sizeof(block_header_t*)) ||
+		audit_add_wraps(needed, max_blocks * sizeof(unsigned char)))
+	{
+		if (result)
+		{
+			result->status = TLSF_AUDIT_ENOSPC;
+			result->detail = "workspace requirement overflows size_t";
+		}
+		return TLSF_AUDIT_ENOSPC;
+	}
+	needed += max_blocks * sizeof(block_header_t*);
+	needed += max_blocks * sizeof(unsigned char);
+	if (workspace_bytes < needed)
+	{
+		if (result)
+		{
+			result->status = TLSF_AUDIT_ENOSPC;
+			result->detail = "workspace too small; see tlsf_audit_workspace_size()";
+		}
+		return TLSF_AUDIT_ENOSPC;
+	}
+
+	states = tlsf_cast(audit_pool_state_t*, workspace);
+	cursor = pool_count * sizeof(audit_pool_state_t);
+	free_table = tlsf_cast(block_header_t**,
+		tlsf_cast(unsigned char*, workspace) + cursor);
+	cursor += max_blocks * sizeof(block_header_t*);
+	visited = tlsf_cast(unsigned char*, workspace) + cursor;
+	/* The visit table is pure scratch; clear stale marks from earlier runs. */
+	if (max_blocks > 0)
+	{
+		memset(visited, 0, max_blocks);
+	}
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.control.lo = control_lo;
+	ctx.control.hi = control_lo + control_bytes;
+	ctx.null_node =
+		&(tlsf_cast(control_t*, tlsf_cast(void*, control))->block_null);
+	ctx.pools = states;
+	ctx.pool_count = pool_count;
+	ctx.free_blocks = free_table;
+	ctx.free_count = 0;
+	ctx.free_cap = max_blocks;
+	ctx.visited = visited;
+	ctx.out = result;
+
+	/* Build the exact per-pool readable ranges. The one-word gap before each
+	** base (the first block's prev_phys field) is deliberately excluded. */
+	for (i = 0; i < pool_count; ++i)
+	{
+		unsigned char* base =
+			tlsf_cast(unsigned char*, tlsf_cast(void*, pools[i].base));
+		audit_pool_state_t* ps = &states[i];
+		size_t user_bytes = pools[i].bytes;
+		size_t pool_bytes;
+
+		if (!audit_make_range(&ps->map, base, user_bytes))
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->detail = "pool range end wraps the address space";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		/* first_header = base - one word; reject an underflowing address. */
+		if (tlsf_cast(uintptr_t, base) < block_header_overhead)
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->detail = "pool header word would wrap below address zero";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		ps->first_header = base - block_header_overhead;
+		ps->free_count = 0;
+
+		/* Expected sentinel position, mirroring tlsf_add_pool's layout. */
+		pool_bytes = (user_bytes - tlsf_pool_overhead()) & ~(ALIGN_SIZE - 1);
+		ps->expected_sentinel = base + pool_bytes;
+	}
+
+	/* Ranges must not overlap; adjacent ranges are allowed. */
+	for (i = 0; i < pool_count; ++i)
+	{
+		size_t k;
+		if (audit_ranges_overlap(&ctx.control, &states[i].map))
+		{
+			if (result)
+			{
+				result->status = TLSF_AUDIT_EINVAL;
+				result->detail = "pool range overlaps the control range";
+			}
+			return TLSF_AUDIT_EINVAL;
+		}
+		for (k = i + 1; k < pool_count; ++k)
+		{
+			if (audit_ranges_overlap(&states[i].map, &states[k].map))
+			{
+				if (result)
+				{
+					result->status = TLSF_AUDIT_EINVAL;
+					result->region = TLSF_AUDIT_REGION_POOL;
+					result->pool_index = tlsf_cast(int, k);
+					result->detail = "pool ranges overlap";
+				}
+				return TLSF_AUDIT_EINVAL;
+			}
+		}
+	}
+
+	/* Physical sweeps first, in the caller's pool order. */
+	for (i = 0; i < pool_count; ++i)
+	{
+		tlsf_audit_status_t st = audit_scan_pool(&ctx, i);
+		if (st != TLSF_AUDIT_OK)
+		{
+			return st;
+		}
+	}
+
+	/* Bitmap and free-list checks in fl/sl index order. */
+	return audit_check_lists(&ctx);
 }
