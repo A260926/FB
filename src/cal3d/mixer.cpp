@@ -21,6 +21,7 @@
 #include "cal3d/skeleton.h"
 #include "cal3d/bone.h"
 #include "cal3d/animation.h"
+#include "cal3d/streamclip.h"
 
 void CalMixer::addAnimation(const ISTD::shared_ptr<CalAnimation>& animation) {
     AnimationList::iterator i = activeAnimations.begin();
@@ -39,6 +40,29 @@ void CalMixer::updateSkeleton(
     const std::vector<BoneTransformAdjustment>& boneTransformAdjustments,
     const std::vector<BoneScaleAdjustment>& boneScaleAdjustments
 ) {
+    // Streamed animations have no in-memory CalCoreAnimation.  Refuse them
+    // explicitly (and before touching the skeleton) instead of dereferencing
+    // a null coreAnimation.
+    for (AnimationList::const_iterator it = activeAnimations.begin(); it != activeAnimations.end(); ++it) {
+        if ((*it)->streamClip) {
+            CalError::setLastError(
+                CalError::BAD_DATA_SOURCE,
+                __FILE__,
+                __LINE__,
+                "updateSkeleton cannot play a streamed animation; use updateSkeletonStreamed");
+            return;
+        }
+    }
+
+    blendSkeleton(skeleton, boneTransformAdjustments, boneScaleAdjustments, 0);
+}
+
+bool CalMixer::blendSkeleton(
+    CalSkeleton* skeleton,
+    const std::vector<BoneTransformAdjustment>& boneTransformAdjustments,
+    const std::vector<BoneScaleAdjustment>& boneScaleAdjustments,
+    cal3d::IStreamPoseProvider* streamProvider
+) {
     skeleton->resetPose();
 
     auto& bones = skeleton->bones;
@@ -50,9 +74,31 @@ void CalMixer::updateSkeleton(
 
     // loop through all animation actions
     for (auto itaa = activeAnimations.begin(); itaa != activeAnimations.end(); ++itaa) {
-        const auto& animation = itaa->get();
+        CalAnimation& animation = *itaa->get();
 
-        const auto& tracks = animation->coreAnimation->tracks;
+        if (streamProvider && animation.streamClip) {
+            const std::vector<unsigned> boneIds = animation.streamClip->trackBoneIds();
+            for (size_t t = 0; t < boneIds.size(); ++t) {
+                const unsigned coreBoneId = boneIds[t];
+                if (coreBoneId >= bones.size()) {
+                    continue;
+                }
+
+                cal3d::RotateTranslate transform;
+                if (!streamProvider->getTrackTransform(animation, coreBoneId, animation.time, transform)) {
+                    return false;
+                }
+
+                bones[coreBoneId].blendPose(
+                    animation.weight * animation.rampValue,
+                    transform,
+                    // higher priority animations replace 0-priority animations
+                    animation.priority != 0 ? animation.rampValue : 0.0f);
+            }
+            continue;
+        }
+
+        const auto& tracks = animation.coreAnimation->tracks;
 
         for (auto track = tracks.begin(); track != tracks.end(); ++track) {
             if (track->coreBoneId >= bones.size()) {
@@ -60,14 +106,15 @@ void CalMixer::updateSkeleton(
             }
 
             bones[track->coreBoneId].blendPose(
-                animation->weight * animation->rampValue,
-                track->getCurrentTransform(animation->time),
+                animation.weight * animation.rampValue,
+                track->getCurrentTransform(animation.time),
                 // higher priority animations replace 0-priority animations
-                animation->priority != 0 ? animation->rampValue : 0.0f);
+                animation.priority != 0 ? animation.rampValue : 0.0f);
         }
     }
 
     skeleton->calculateAbsolutePose();
+    return true;
 }
 
 void CalMixer::applyBoneAdjustments(

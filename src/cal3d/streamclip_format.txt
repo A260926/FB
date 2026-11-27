@@ -1,0 +1,92 @@
+Cal3D stream clip file format (.csc)
+====================================
+
+All multi-byte fields are fixed-width little-endian values.  Floats are
+IEEE-754 binary32.  No native struct layout, padding or pointer values are
+stored.  Every on-disk value (including times, translations and quaternion
+components) must be finite; NaN/Inf make the file invalid.
+
+Overall layout
+--------------
+
+  file          = header directory blocks...
+  header        = magic version flags duration blockDuration
+                  blockCount trackCount dataStart contentCrc32
+                  (40 bytes total)
+  magic         = u32, the four file-order bytes 'C','S','C','1'
+                  (0x43 0x53 0x43 0x31, i.e. little-endian u32 0x31435343)
+  version       = u32, currently 1
+  flags         = u32, reserved, must be 0
+  duration      = f32, CalCoreAnimation::duration, >= 0 and finite
+  blockDuration = f32, positive finite value passed to the offline writer
+  blockCount    = u32, number of block directory entries (>= 1)
+  trackCount    = u32, number of track directory entries (>= 1)
+  dataStart     = u64, absolute byte offset of the first block payload
+  contentCrc32  = u32, CRC-32 over every byte from dataStart through end of
+                  file, stored in the header.  It is an offline integrity
+                  digest for tools that scan whole files; the streaming
+                  opener never reads the payloads and instead verifies each
+                  block lazily through its per-block directory checksum.
+
+Directory (immediately after the 48-byte header)
+-------------------------------------------------
+
+  directory     = blockEntry[blockCount] trackEntry[trackCount]
+
+  blockEntry (32 bytes):
+    blockIndex  = u32, 0 .. blockCount-1, strictly increasing
+    blockStart  = f32, begin of the half-open time interval [start, end)
+    blockEnd    = f32, end of the interval; the last block ends at duration
+    offset      = u64, absolute byte offset of the block payload (>= dataStart)
+    length      = u32, payload length in bytes (<= 32 MiB, i.e. 33554432)
+    checksum    = u32, CRC-32 of the block payload bytes only
+    reserved    = u32, must be 0 (pads the entry to a fixed 32 bytes)
+
+  Block intervals partition [0, duration] into half-open intervals of exactly
+  blockDuration, except the final block which contains duration.  Entries must
+  be contiguous (end of one == start of the next), disjoint and in range.
+
+  trackEntry (8 bytes):
+    coreBoneId  = u32, bone id animated by the track, no duplicates
+    keyCount    = u32, total number of original keys stored for the track
+                  across all blocks (0 for an empty track)
+
+Block payload
+-------------
+
+Each block payload is independent and starts with:
+
+  blockHeader   = trackCountInBlock : u32
+  then trackCountInBlock repetitions of:
+    trackRef    = coreBoneId : u32   (must name a track directory entry)
+                  keyCount    : u32   (number of keys in this block, may be 0)
+                  keys        = key[keyCount]
+  key (32 bytes):
+    time        = f32
+    translation = f32 x 3
+    rotation    = f32 x 4  (x, y, z, w)
+
+A block stores, per track, every original keyframe whose time falls inside the
+block's half-open interval, plus the predecessor key immediately before the
+interval and the successor key immediately at/after the interval whenever they
+exist.  Curves are never resampled at block boundaries.  Key times inside a
+payload are strictly increasing; a key shared as the successor of one block and
+the interior/predecessor key of the next is stored twice on purpose so that
+every block can be sampled alone.  The last block includes the key at
+duration.
+
+Validation performed on open
+----------------------------
+
+magic/version/flags, finite scalars, directory bounds inside the file,
+contiguous non-overlapping block intervals, unique track ids, payload length
+limit and payload tiling of the data region.  Only the header and directory
+are read; block payloads are neither read nor checksummed at open time, and
+each block is verified lazily via its per-block checksum on first use.
+
+Hand-written files
+------------------
+
+A test can build a valid file from scratch using only the field widths above.
+The CRC-32 used is the standard zlib/IEEE variant
+(poly 0xEDB88320 reflected, init 0xFFFFFFFF, final XOR 0xFFFFFFFF).
