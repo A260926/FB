@@ -216,6 +216,7 @@
     <ClCompile Include="..\..\src\mnemonics.c" />
     <ClCompile Include="..\..\src\operands.c" />
     <ClCompile Include="..\..\src\prefix.c" />
+    <ClCompile Include="..\..\src\prefix_trace.c" />
     <ClCompile Include="..\..\src\textdefs.c" />
   </ItemGroup>
   <ItemGroup>
@@ -225,6 +226,7 @@
     <ClInclude Include="..\..\src\instructions.h" />
     <ClInclude Include="..\..\src\insts.h" />
     <ClInclude Include="..\..\include\mnemonics.h" />
+    <ClInclude Include="..\..\include\prefix_trace.h" />
     <ClInclude Include="..\..\src\operands.h" />
     <ClInclude Include="..\..\src\prefix.h" />
     <ClInclude Include="..\..\src\textdefs.h" />

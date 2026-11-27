@@ -108,11 +108,30 @@ uint16_t prefixes_set_unused_mask(_PrefixState* ps)
 /*
  * Mark a prefix as unused, and bookkeep where we last saw this same type,
  * because in the future we might want to disable it too.
+ * Also feeds the prefix trace (when enabled): the former prefix of this type
+ * was overridden by the new one, and a record is appended for the new byte.
  */
-_INLINE_ void prefixes_track_unused(_PrefixState* ps, int index, _PrefixIndexer pi)
+_INLINE_ void prefixes_track_unused(_PrefixState* ps, int index, _PrefixIndexer pi, uint8_t byte)
 {
+	/* Maps a prefix type to the trace group of its byte, indexed by _PrefixIndexer. */
+	static const uint8_t typeToGroup[PFXIDX_MAX] = {
+		PFX_GROUP_REX, PFX_GROUP_LOCK_REPEAT, PFX_GROUP_SEGMENT, PFX_GROUP_OPERAND_SIZE, PFX_GROUP_ADDRESS_SIZE
+	};
+
 	/* Mark the previously used prefix (if exists) in the unused mask. */
 	prefixes_ignore(ps, pi);
+
+	if (ps->trace) {
+		/* If a prefix of this type was seen before, it just got overridden by this byte. */
+		if (ps->pfxIndexer[pi]) {
+			unsigned int victim = 0;
+			uint16_t mask = ps->pfxIndexer[pi];
+			while ((mask & 1) == 0) { mask >>= 1; victim++; }
+			prefix_trace_superseded(ps, victim, (unsigned int)index);
+		}
+		prefix_trace_append(ps, (unsigned int)index, 1, byte, typeToGroup[pi]);
+	}
+
 	/* Book-keep the current index for this type. */
 	ps->pfxIndexer[pi] = 1 << index;
 }
@@ -175,57 +194,57 @@ void prefixes_decode(_CodeInfo* ci, _PrefixState* ps)
 		{
 		case PREFIX_OP_SIZE: {/* Op Size type: */
 			ps->decodedPrefixes |= INST_PRE_OP_SIZE;
-			prefixes_track_unused(ps, index, PFXIDX_OP_SIZE);
+			prefixes_track_unused(ps, index, PFXIDX_OP_SIZE, byte);
 		} break;
 			/* Look for both common arch prefixes. */
 		case PREFIX_LOCK: {
 			/* LOCK and REPx type: */
 			ps->decodedPrefixes |= INST_PRE_LOCK;
-			prefixes_track_unused(ps, index, PFXIDX_LOREP);
+			prefixes_track_unused(ps, index, PFXIDX_LOREP, byte);
 		} break;
 		case PREFIX_REPNZ: {
 			ps->decodedPrefixes |= INST_PRE_REPNZ;
-			prefixes_track_unused(ps, index, PFXIDX_LOREP);
+			prefixes_track_unused(ps, index, PFXIDX_LOREP, byte);
 		} break;
 		case PREFIX_REP: {
 			ps->decodedPrefixes |= INST_PRE_REP;
-			prefixes_track_unused(ps, index, PFXIDX_LOREP);
+			prefixes_track_unused(ps, index, PFXIDX_LOREP, byte);
 		} break;
 		case PREFIX_CS: {
 			/* Seg Overide type: */
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 			ps->decodedPrefixes |= INST_PRE_CS;
-			prefixes_track_unused(ps, index, PFXIDX_SEG);
+			prefixes_track_unused(ps, index, PFXIDX_SEG, byte);
 		} break;
 		case PREFIX_SS: {
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 			ps->decodedPrefixes |= INST_PRE_SS;
-			prefixes_track_unused(ps, index, PFXIDX_SEG);
+			prefixes_track_unused(ps, index, PFXIDX_SEG, byte);
 		} break;
 		case PREFIX_DS: {
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 			ps->decodedPrefixes |= INST_PRE_DS;
-			prefixes_track_unused(ps, index, PFXIDX_SEG);
+			prefixes_track_unused(ps, index, PFXIDX_SEG, byte);
 		} break;
 		case PREFIX_ES: {
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 			ps->decodedPrefixes |= INST_PRE_ES;
-			prefixes_track_unused(ps, index, PFXIDX_SEG);
+			prefixes_track_unused(ps, index, PFXIDX_SEG, byte);
 		} break;
 		case PREFIX_FS: {
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 			ps->decodedPrefixes |= INST_PRE_FS;
-			prefixes_track_unused(ps, index, PFXIDX_SEG);
+			prefixes_track_unused(ps, index, PFXIDX_SEG, byte);
 		} break;
 		case PREFIX_GS: {
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK;
 			ps->decodedPrefixes |= INST_PRE_GS;
-			prefixes_track_unused(ps, index, PFXIDX_SEG);
+			prefixes_track_unused(ps, index, PFXIDX_SEG, byte);
 		} break;
 		case PREFIX_ADDR_SIZE: {
 			/* Addr Size type: */
 			ps->decodedPrefixes |= INST_PRE_ADDR_SIZE;
-			prefixes_track_unused(ps, index, PFXIDX_ADRS);
+			prefixes_track_unused(ps, index, PFXIDX_ADRS, byte);
 		} break;
 		default:
 			if (ci->dt == Decode64Bits) {
@@ -235,7 +254,7 @@ void prefixes_decode(_CodeInfo* ci, _PrefixState* ps)
 					rexPos = ci->code;
 					ps->vrex = byte & 0xf; /* Keep only BXRW. */
 					ps->prefixExtType = PET_REX;
-					prefixes_track_unused(ps, index, PFXIDX_REX);
+					prefixes_track_unused(ps, index, PFXIDX_REX, byte);
 					continue;
 				}
 			}
@@ -256,6 +275,9 @@ _Break2:
 			ps->vexPos = ci->code + 1;
 			ps->decodedPrefixes |= INST_PRE_VEX;
 			ps->prefixExtType = PET_VEX2BYTES;
+
+			/* Trace the whole VEX as a single two bytes record. */
+			prefix_trace_append(ps, (unsigned int)(ci->code - start), 2, PREFIX_VEX2b, PFX_GROUP_VEX);
 
 			/*
 			 * VEX 1 byte bits:
@@ -289,6 +311,9 @@ _Break2:
 			ps->decodedPrefixes |= INST_PRE_VEX;
 			ps->prefixExtType = PET_VEX3BYTES;
 
+			/* Trace the whole VEX as a single three bytes record. */
+			prefix_trace_append(ps, (unsigned int)(ci->code - start), 3, PREFIX_VEX3b, PFX_GROUP_VEX);
+
 			/*
 			 * VEX first and second bytes:
 			 * |7-6-5-4----0|  |7-6--3-2-10|
@@ -318,6 +343,8 @@ _Break2:
 				ps->decodedPrefixes &= ~INST_PRE_REX;
 				if (ps->prefixExtType == PET_REX) ps->prefixExtType = PET_NONE; /* It might be a VEX by now, keep it that way. */
 				prefixes_ignore(ps, PFXIDX_REX);
+				/* The REX sat too far from the opcode, trace that decision. */
+				prefix_trace_rex_position(ps);
 			}
 			/*
 			 * We will disable operand size prefix,
@@ -329,6 +356,8 @@ _Break2:
 		if (ps->decodedPrefixes & INST_PRE_SEGOVRD_MASK32) {
 			ps->decodedPrefixes &= ~INST_PRE_SEGOVRD_MASK32;
 			prefixes_ignore(ps, PFXIDX_SEG);
+			/* The decoding mode voids this segment override, trace that decision. */
+			prefix_trace_mode_ignored(ps, PFXIDX_SEG);
 		}
 	}
 
@@ -353,6 +382,11 @@ void prefixes_use_segment(_iflags defaultSeg, _PrefixState* ps, _DecodeType dt, 
 	if (dt == Decode64Bits) {
 		if (ps->decodedPrefixes & INST_PRE_SEGOVRD_MASK64) { /* Either GS or FS. */
 			di->segment = ps->decodedPrefixes & INST_PRE_GS ? R_GS : R_FS;
+			/*
+			 * FS/GS overrides do take effect in 64 bits (the decoder sets the
+			 * segment above), even though they are not part of usedPrefixes.
+			 */
+			prefix_trace_segment_used(ps);
 		}
 
 		return;

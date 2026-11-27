@@ -193,6 +193,21 @@ static _InstInfo* inst_lookup_prefixed(_InstNode in, _PrefixState* ps)
 		if ((ii == NULL) || (~INST_INFO_FLAGS(ii) & INST_PRE_OP_SIZE)) return NULL;
 	}
 
+	/*
+	 * The prefix byte that led to this index was consumed as a mandatory
+	 * opcode selector - but only if the instruction was really found through
+	 * it (and not through the non-prefixed fallback below).
+	 */
+	if (ii != NULL) {
+		switch (index)
+		{
+			case 1: prefix_trace_mandatory(ps, PREFIX_OP_SIZE); break;
+			case 2: prefix_trace_mandatory(ps, PREFIX_REP); break;
+			case 3: prefix_trace_mandatory(ps, PREFIX_REPNZ); break;
+			default: break; /* Index 0 - no prefix was consumed. */
+		}
+	}
+
 	/* If there was a prefix, but the instruction wasn't found. Try to fall back to use the normal instruction. */
 	if (ii == NULL) ii = inst_get_info(in, 0);
 	return ii;
@@ -246,6 +261,9 @@ static _InstInfo* inst_vex_lookup(_CodeInfo* ci, _PrefixState* ps)
 		ps->vexV = v = (~vex2 >> 3) & 0xf;
 		pp = vex2 & 3;
 	}
+
+	/* Keep the pp field around, it implies the mandatory selector of this VEX. */
+	ps->vexPP = pp;
 
 	/* start can be either 1 (0x0f), 2 (0x0f, 0x038) or 3 (0x0f, 0x3a), otherwise it's illegal. */
 	switch (start)

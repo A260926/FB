@@ -14,6 +14,7 @@ This library is licensed under the BSD license. See the file COPYING.
 
 #include "config.h"
 #include "decoder.h"
+#include "../include/prefix_trace.h"
 
 
 /* Specifies the type of the extension prefix, such as: REX, 2 bytes VEX, 3 bytes VEX. */
@@ -41,9 +42,16 @@ typedef struct {
 	int isOpSizeMandatory;
 	/* If VEX prefix is used, store the VEX.vvvv field. */
 	unsigned int vexV;
+	/* If VEX prefix is used, store the VEX.pp field (the implied mandatory prefix). */
+	unsigned int vexPP;
 	/* The fields B/X/R/W/L of REX and VEX are stored together in this byte. */
 	unsigned int vrex;
 	const uint8_t* vexPos;
+	/*
+	 * Sideband prefix trace of the current instruction, NULL when tracing is off.
+	 * Filled by the prefix_trace_* hooks below while scanning/decoding.
+	 */
+	_PrefixTraceInfo* trace;
 } _PrefixState;
 
 /*
@@ -75,5 +83,31 @@ void prefixes_ignore_all(_PrefixState* ps);
 uint16_t prefixes_set_unused_mask(_PrefixState* ps);
 void prefixes_decode(_CodeInfo* ci, _PrefixState* ps);
 void prefixes_use_segment(_iflags defaultSeg, _PrefixState* ps, _DecodeType dt, _DInst* di);
+
+/*
+ * Prefix trace hooks, called from the decoder at the exact spots where it
+ * decides the fate of a prefix byte. All of them are no-ops when tracing is
+ * off (ps->trace == NULL). Implemented in prefix_trace.c.
+ */
+/* Append a record for a prefix that was just scanned. */
+void prefix_trace_append(_PrefixState* ps, unsigned int offset, unsigned int length, uint8_t byte, unsigned int group);
+/* The prefix at victimOffset got overridden by a later byte of the same group at byOffset. */
+void prefix_trace_superseded(_PrefixState* ps, unsigned int victimOffset, unsigned int byOffset);
+/* The last REX prefix doesn't immediately precede the opcode/VEX byte. */
+void prefix_trace_rex_position(_PrefixState* ps);
+/* The last prefix of type pi is void in the current decoding mode. */
+void prefix_trace_mode_ignored(_PrefixState* ps, _PrefixIndexer pi);
+/* A REX.W takes precedence over the last 0x66 operand-size prefix. */
+void prefix_trace_rexw_opsize(_PrefixState* ps);
+/* The last prefix byte with the given value was consumed as a mandatory opcode selector. */
+void prefix_trace_mandatory(_PrefixState* ps, uint8_t byte);
+/* The last segment override prefix took effect (64 bits FS/GS override). */
+void prefix_trace_segment_used(_PrefixState* ps);
+/*
+ * Assign the final roles/reasons of all records of the current instruction,
+ * from the decoder's own used-prefixes bookkeeping. Called once per
+ * successfully decoded instruction.
+ */
+void prefix_trace_finalize(_PrefixState* ps);
 
 #endif /* PREFIX_H */

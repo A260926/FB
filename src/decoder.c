@@ -120,6 +120,8 @@ static _DecodeResult decode_inst(_CodeInfo* ci, _PrefixState* ps, const uint8_t*
 			(!ps->isOpSizeMandatory)) {
 			ps->decodedPrefixes &= ~INST_PRE_OP_SIZE;
 			prefixes_ignore(ps, PFXIDX_OP_SIZE);
+			/* The REX.W wins over the operand-size prefix, trace that decision. */
+			prefix_trace_rexw_opsize(ps);
 		}
 
 		effAdrSz = decode_get_effective_addr_size(ci->dt, ps->decodedPrefixes);
@@ -380,6 +382,9 @@ _SkipOpcoding:
 	/* Set the unused prefixes mask, if any prefixes (not) used at all. */
 	if (isPrefixed) di->unusedPrefixesMask = prefixes_set_unused_mask(ps);
 
+	/* Resolve the final roles/reasons of the prefix trace records, if traced. */
+	prefix_trace_finalize(ps);
+
 	/* Copy instruction meta. */
 	di->meta = isi->meta;
 
@@ -432,6 +437,20 @@ _Undecodable: /* If the instruction couldn't be decoded for some reason, fail. *
  */
 _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[], unsigned int maxResultCount, unsigned int* usedInstructionsCount)
 {
+	return decode_internal_ex(_ci, supportOldIntr, result, maxResultCount, usedInstructionsCount, NULL);
+}
+
+/*
+ * decode_internal_ex
+ *
+ * Same as decode_internal, with an optional sideband array of prefix traces.
+ * traces (when not NULL) has room for maxResultCount entries and is advanced
+ * in lockstep with the result array, so traces[i] always describes result[i],
+ * including filtered-out instructions (which don't consume a slot) and
+ * undecodable bytes (whose entry is left empty).
+ */
+_DecodeResult decode_internal_ex(_CodeInfo* _ci, int supportOldIntr, _DInst result[], unsigned int maxResultCount, unsigned int* usedInstructionsCount, _PrefixTraceInfo traces[])
+{
 	_CodeInfo ci = *_ci; /* A working copy, we don't touch user's _ci except OUT params. */
 	_PrefixState ps;
 	/* Bookkeep these from ci below, as it makes things way simpler. */
@@ -444,6 +463,9 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 	/* Current working decoded instruction in results. */
 	_DInst* pdi = (_DInst*)&result[0]; /* There's always a room for at least one slot, checked earlier. */
 	_DInst* maxResultAddr;
+
+	/* Current sideband entry, advances together with pdi (NULL when tracing is off). */
+	_PrefixTraceInfo* pti = traces;
 
 	unsigned int features = ci.features;
 
@@ -493,6 +515,13 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 			break;
 		}
 
+		/*
+		 * Point the prefix state at the current sideband entry (if any) and start it empty.
+		 * Note this happens only after the capacity check above, so pti is always valid here.
+		 */
+		ps.trace = pti;
+		if (pti) pti->count = 0;
+
 		ret = decode_inst(&ci, &ps, code, pdi);
 		/* decode_inst keeps track (only if successful!) for code and codeLen but ignores codeOffset, fix it here. */
 		ci.codeOffset += pdi->size;
@@ -516,6 +545,7 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 				/* Check whether we need to stop on any feature. */
 				if ((features & DF_STOP_ON_PRIVILEGED) && (FLAG_GET_PRIVILEGED(pdi->flags))) {
 					pdi = (_DInst*)((char*)pdi + diStructSize);
+					if (pti) pti++;
 					break; /* ret = DECRES_SUCCESS; */
 				}
 
@@ -530,6 +560,7 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 						((features & DF_STOP_ON_CMOV) && (mfc == FC_CMOV)) ||
 						((features & DF_STOP_ON_HLT) && (mfc == FC_HLT)))) {
 						pdi = (_DInst*)((char*)pdi + diStructSize);
+						if (pti) pti++;
 						break; /* ret = DECRES_SUCCESS; */
 					}
 				}
@@ -537,6 +568,7 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 
 			/* Allocate at least one more entry to use, for the next instruction. */
 			pdi = (_DInst*)((char*)pdi + diStructSize);
+			if (pti) pti++;
 		}
 		else { /* ret == DECRES_INPUTERR */
 
@@ -548,6 +580,9 @@ _DecodeResult decode_internal(_CodeInfo* _ci, int supportOldIntr, _DInst result[
 				pdi->size = 1;
 				pdi->addr = codeOffset & ci.addrMask;
 				pdi = (_DInst*)((char*)pdi + diStructSize);
+
+				/* Undecodable bytes get an empty sideband entry, drop partial records. */
+				if (pti) pti++->count = 0;
 
 				/* If an instruction wasn't decoded then stop on undecodeable if set. */
 				if (features & DF_STOP_ON_UNDECODEABLE) {
