@@ -64,6 +64,10 @@ vec4 Model::vert(const int iface, const int nthvert) const {
     return verts[facet_vrt[iface*3+nthvert]];
 }
 
+int Model::face_vert_index(const int iface, const int nthvert) const {
+    return facet_vrt[iface*3+nthvert];
+}
+
 vec4 Model::normal(const int iface, const int nthvert) const {
     return norms[facet_nrm[iface*3+nthvert]];
 }

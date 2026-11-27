@@ -4,6 +4,8 @@
 mat<4,4> ModelView, Viewport, Perspective; // "OpenGL" state matrices
 std::vector<double> zbuffer;               // depth buffer
 
+constexpr double depth_clear_value = -1000.; // matches the historical init_zbuffer fill
+
 void lookat(const vec3 eye, const vec3 center, const vec3 up) {
     vec3 n = normalized(eye-center);
     vec3 l = normalized(cross(up,n));
@@ -21,27 +23,61 @@ void init_viewport(const int x, const int y, const int w, const int h) {
 }
 
 void init_zbuffer(const int width, const int height) {
-    zbuffer = std::vector(width*height, -1000.);
+    zbuffer = std::vector(width*height, depth_clear_value);
+}
+
+GlRasterUnit gl_make_raster_unit(const Triangle &clip) {
+    GlRasterUnit u;
+    for (int i = 0; i < 3; i++) {
+        u.clip[i]   = clip[i];
+        u.ndc[i]    = clip[i]/clip[i].w;                                   // normalized device coordinates
+        u.screen[i] = (Viewport*u.ndc[i]).xy();                            // screen coordinates
+    }
+    mat<3,3> ABC = {{ {u.screen[0].x, u.screen[0].y, 1.},
+                      {u.screen[1].x, u.screen[1].y, 1.},
+                      {u.screen[2].x, u.screen[2].y, 1.} }};
+    u.area      = ABC.det();
+    u.abc_inv_t = ABC.invert_transpose();
+    auto [bbminx,bbmaxx] = std::minmax({u.screen[0].x, u.screen[1].x, u.screen[2].x});
+    auto [bbminy,bbmaxy] = std::minmax({u.screen[0].y, u.screen[1].y, u.screen[2].y});
+    u.bbminx = bbminx; u.bbmaxx = bbmaxx;
+    u.bbminy = bbminy; u.bbmaxy = bbmaxy;
+    return u;
+}
+
+bool gl_unit_culled(const GlRasterUnit &u) {
+    return u.area < 1; // backface culling + discarding triangles that cover less than a pixel
+}
+
+bool gl_evaluate_pixel(const GlRasterUnit &u, const int x, const int y,
+                       vec3 &bc_screen, vec3 &bc_clip, double &z) {
+    bc_screen = u.abc_inv_t * vec3{static_cast<double>(x), static_cast<double>(y), 1.}; // barycentric coordinates of {x,y}
+    bc_clip   = { bc_screen.x/u.clip[0].w, bc_screen.y/u.clip[1].w, bc_screen.z/u.clip[2].w }; // perspective-corrected weights
+    bc_clip   = bc_clip / (bc_clip.x + bc_clip.y + bc_clip.z);
+    if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) return false; // outside the triangle
+    z = bc_screen * vec3{ u.ndc[0].z, u.ndc[1].z, u.ndc[2].z };        // linear interpolation of the depth
+    return true;
+}
+
+bool gl_depth_passes(const double z, const double stored) {
+    return z > stored; // strict: equal depth keeps the fragment drawn first
+}
+
+double gl_depth_clear() {
+    return depth_clear_value;
 }
 
 void rasterize(const Triangle &clip, const IShader &shader, TGAImage &framebuffer) {
-    vec4 ndc[3]    = { clip[0]/clip[0].w, clip[1]/clip[1].w, clip[2]/clip[2].w };                // normalized device coordinates
-    vec2 screen[3] = { (Viewport*ndc[0]).xy(), (Viewport*ndc[1]).xy(), (Viewport*ndc[2]).xy() }; // screen coordinates
+    GlRasterUnit u = gl_make_raster_unit(clip);
+    if (gl_unit_culled(u)) return;
 
-    mat<3,3> ABC = {{ {screen[0].x, screen[0].y, 1.}, {screen[1].x, screen[1].y, 1.}, {screen[2].x, screen[2].y, 1.} }};
-    if (ABC.det()<1) return; // backface culling + discarding triangles that cover less than a pixel
-
-    auto [bbminx,bbmaxx] = std::minmax({screen[0].x, screen[1].x, screen[2].x}); // bounding box for the triangle
-    auto [bbminy,bbmaxy] = std::minmax({screen[0].y, screen[1].y, screen[2].y}); // defined by its top left and bottom right corners
 #pragma omp parallel for
-    for (int x=std::max<int>(bbminx, 0); x<=std::min<int>(bbmaxx, framebuffer.width()-1); x++) {         // clip the bounding box by the screen
-        for (int y=std::max<int>(bbminy, 0); y<=std::min<int>(bbmaxy, framebuffer.height()-1); y++) {
-            vec3 bc_screen = ABC.invert_transpose() * vec3{static_cast<double>(x), static_cast<double>(y), 1.}; // barycentric coordinates of {x,y} w.r.t the triangle
-            vec3 bc_clip   = { bc_screen.x/clip[0].w, bc_screen.y/clip[1].w, bc_screen.z/clip[2].w };     // check https://github.com/ssloy/tinyrenderer/wiki/Technical-difficulties-linear-interpolation-with-perspective-deformations
-            bc_clip = bc_clip / (bc_clip.x + bc_clip.y + bc_clip.z);
-            if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue; // negative barycentric coordinate => the pixel is outside the triangle
-            double z = bc_screen * vec3{ ndc[0].z, ndc[1].z, ndc[2].z };   // linear interpolation of the depth
-            if (z <= zbuffer[x+y*framebuffer.width()]) continue;   // discard fragments that are too deep w.r.t the z-buffer
+    for (int x=std::max<int>(u.bbminx, 0); x<=std::min<int>(u.bbmaxx, framebuffer.width()-1); x++) {  // clip the bounding box by the screen
+        for (int y=std::max<int>(u.bbminy, 0); y<=std::min<int>(u.bbmaxy, framebuffer.height()-1); y++) {
+            vec3 bc_screen, bc_clip;
+            double z;
+            if (!gl_evaluate_pixel(u, x, y, bc_screen, bc_clip, z)) continue;
+            if (!gl_depth_passes(z, zbuffer[x+y*framebuffer.width()])) continue; // discard fragments that are too deep
             auto [discard, color] = shader.fragment(bc_clip);
             if (discard) continue;                                 // fragment shader can discard current fragment
             zbuffer[x+y*framebuffer.width()] = z;                  // update the z-buffer
@@ -49,4 +85,3 @@ void rasterize(const Triangle &clip, const IShader &shader, TGAImage &framebuffe
         }
     }
 }
-

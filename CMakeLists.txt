@@ -26,4 +26,10 @@ set(SOURCES main.cpp our_gl.cpp model.cpp tgaimage.cpp)
 add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE $<$<BOOL:${OpenMP_CXX_FOUND}>:OpenMP::OpenMP_CXX>)
 
+# Differentiable renderer and its texture-fitting example. The differentiable
+# tests live under tests/ and are built by task_support/run.sh, not here.
+set(DIFF_SOURCES differentiable.cpp our_gl.cpp model.cpp tgaimage.cpp)
+add_executable(fit_texture examples/fit_texture.cpp ${DIFF_SOURCES})
+target_include_directories(fit_texture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
 file(GENERATE OUTPUT .gitignore CONTENT "*")

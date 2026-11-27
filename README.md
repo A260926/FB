@@ -99,3 +99,105 @@ cmake --build build -j &&
 build/tinyrenderer obj/diablo3_pose/diablo3_pose.obj obj/floor.obj
 ```
 The rendered image is saved to `framebuffer.tga`.
+
+## Differentiable renderer
+
+`differentiable.h` / `differentiable.cpp` add a differentiable rendering path
+that reuses the coverage, barycentric and depth-selection logic in
+`our_gl.cpp`. The legacy `IShader`, `rasterize()` and the byte-image command
+line keep their original behavior.
+
+### Scene
+
+`DiffScene::from_model(model, width, height)` builds an owned, editable scene
+from a const `Model`:
+
+- positions are shared by the original position index (one entry per vertex);
+- UVs are stored **per face corner** and are never merged, even when two
+  corners share a position;
+- the floating-point RGB texture is initialized from `Model::diffuse()` by
+  dividing each linear R, G, B channel by 255 (the TGA file stores BGRA, so the
+  channel order is explicitly undone); it must be at least 2x2;
+- `ModelView`, `Perspective` and `Viewport` are snapshotted from the global
+  camera state at construction time (`ModelView` is assumed rigid).
+
+Positions, corner UVs and texture texels are editable through the scene
+accessors. UVs are the already-flipped `Model` UVs, and texture row indices
+match `TGAImage::get`.
+
+### Forward pass
+
+```cpp
+DiffImage image;
+std::unique_ptr<DiffRecord> record = diff_render(scene, light_dir, image);
+```
+
+`light_dir` is a unit view-space direction pointing toward the light. The
+material is linear diffuse only:
+
+```
+N     = normalize(cross(P1-P0, P2-P0))   // view-space face normal
+color = T(u, v) * (0.2 + 0.8 * max(0, N dot L))
+```
+
+Integer pixel sampling, screen-area culling (`det < 1`), perspective-corrected
+UV interpolation and the "larger z/w is nearer, equal depth keeps the face
+drawn first" rule all come from the shared `our_gl` helpers. UVs are clamped
+to `[0,1]`, mapped onto `[0,W-1] x [0,H-1]` and bilinearly interpolated; the
+right/bottom edge reuses the last legal cell and grid lines pick the
+right/lower cell. Outputs are unclamped `double` linear RGB, plus depth and the
+winning face id (`-1` on zero background).
+
+The returned `DiffRecord` owns every forward value it needs (matrices, view
+geometry, barycentrics, 1/w, sampled texels, shading). Destroying the `Model`,
+editing the scene, changing the global camera or rendering another frame does
+not change an old record. At a given pixel only the final winning fragment is
+stored, so an earlier occluded fragment leaves no adjoint contribution.
+
+### Adjoint
+
+```cpp
+DiffGradients grad = diff_backward(record, g); // g: one RGB adjoint per pixel
+```
+
+Returns gradients of `sum(g dot C)` with respect to shared positions,
+per-corner UVs and every RGB texel. The adjoint is hand-written (no autodiff
+library, no re-rendering or numerical differences) and does work proportional
+to the record's winning-pixel count. A record can be back-propagated with
+different `g` any number of times; each result is independent and
+zero-initialized.
+
+Coverage, culling, face selection, rounding and texture-cell branches are
+frozen (no silhouette or occlusion-switch derivatives), but the screen
+barycentrics, 1/w, projection, perspective UV and unit-normal chains through
+which positions affect color are all differentiated. UV-clamped regions and
+the `max(0,.)` kink at zero get zero derivative; shared positions accumulate
+contributions across faces; background and fully occluded faces produce no
+gradient.
+
+### Fixed-visibility limitation
+
+Because coverage and face selection are held fixed from the forward record,
+the gradients describe moving color within the currently visible pixels. They
+do **not** include derivatives of triangles entering/leaving the framebuffer,
+crossing silhouette edges or changing which face wins a depth contest. The
+texture-fitting example therefore freezes geometry and the camera and
+optimizes only the texture.
+
+### Tests and example
+
+```sh
+# three registered groups (forward, adjoint, lifetime) plus the legacy baseline
+bash task_support/run.sh target
+
+# texture-fitting example: generates an OBJ + non-uniform TGA, descends the
+# texture, writes before/after TGA images into the given directory
+cmake -Bbuild && cmake --build build -j
+build/fit_texture <output-directory>
+```
+
+The adjoint tests compare the hand-written gradients against two magnitudes of
+central finite differences (the numerical reference exists only inside the
+test file) on pixels away from coverage, face-selection and sampling branches,
+and additionally verify cross-face gradient accumulation, zero contribution
+from invisible faces and clamp/max kinks.
