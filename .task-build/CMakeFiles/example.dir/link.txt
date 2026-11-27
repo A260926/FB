@@ -1,0 +1,1 @@
+/usr/bin/cc -Dfdopen=fdopen -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/example.dir/test/example.c.o -o example  -Wl,-rpath,/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build libz.1.2.12.dylib

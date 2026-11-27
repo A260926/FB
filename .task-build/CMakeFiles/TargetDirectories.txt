@@ -1,0 +1,11 @@
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/zlib.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/zlibstatic.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/example.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/minigzip.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/test.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FS09B1BB13B19FU16846/attempts/20261127T163321340873Z/repo/.task-build/CMakeFiles/install/strip.dir
