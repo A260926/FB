@@ -119,6 +119,41 @@ Default: `true`
 
 Set to `true` to remux audio and video into a single MP4 segment.
 
+##### inbandMetadata
+
+Type: `boolean`
+
+Default: `false`
+
+When enabled, complete ID3 v2.4 tags found in the input TS are carried into
+the remuxed output as version 1 `emsg` boxes, placed immediately before the
+first `moof` of each media output and carrying the full original tag as
+message data. The generated `ftyp` gains an `aid3` compatible brand. This is
+only supported for TS input with `remux: true` (the default); raw AAC input or
+`remux: false` is rejected through the `error` event without emitting media.
+
+```js
+const {Transmuxer} = require('mux.js/lib/mp4/transmuxer');
+
+const transmuxer = new Transmuxer({
+  baseMediaDecodeTime: 90000,
+  inbandMetadata: true
+});
+
+transmuxer.on('data', (segment) => {
+  // segment.data starts with a sequence of v1 emsg boxes (one per ID3
+  // tag whose PTS falls inside this output), followed by the usual
+  // moof/mdat pairs. The emsg message_data is the untouched ID3 tag.
+  // segment.initSegment's ftyp includes the 'aid3' compatible brand.
+});
+transmuxer.on('error', (err) => {
+  // e.g. inbandMetadata was requested for raw AAC input or remux: false
+});
+
+transmuxer.push(tsSegmentBytes); // a Uint8Array of 188-byte TS packets
+transmuxer.flush();
+```
+
 #### CaptionParser
 
 `muxjs.mp4.CaptionParser`
