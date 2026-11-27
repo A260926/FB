@@ -131,6 +131,10 @@ static void test_pipe(void)
 	memset(&d, 0, sizeof d);
 	d.path = path; d.radius_x = (qaws_scalar)0.35;
 	TEST_ASSERT(qaws_surface_create_pipe(&s, &d) == QAWS_STATUS_OK, "pipe created");
+	/* A pipe now defaults to the adaptive rotation-minimizing field at 1e-5 (qaws_surface_pipe_set_rmf); this test keeps
+	   its original tight bounds by selecting the pipe's original fixed-table rotation-minimizing frames (tolerance 0),
+	   which is the behaviour it was written against. The adaptive field's derivatives are checked in sweep_rmf_task.c. */
+	TEST_ASSERT(qaws_surface_pipe_set_rmf(s, NULL, (qaws_scalar)0) == QAWS_STATUS_OK, "pipe: original frame table selected");
 	sd_check(s, "pipe (rotation-minimizing)", &e_du, &e_duv, &e_duu);
 	TEST_ASSERT(e_du <= (SD_F32 ? SD_DU : 1e-7), "pipe: du analytic");
 	TEST_ASSERT(e_duv <= (SD_F32 ? SD_DUV : 1e-6), "pipe: mixed derivative analytic");

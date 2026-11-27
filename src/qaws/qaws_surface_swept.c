@@ -1,6 +1,7 @@
 #include "qaws_surface_swept.h"
 #include "qaws_eval.h"
 #include "qaws_inspect.h"
+#include "qaws_sweep_rmf.h"
 #include "internal/qaws_internal_surface.h"
 #include "internal/qaws_internal_curve.h"
 #include <stdlib.h>
@@ -15,11 +16,14 @@ typedef struct qaws_surface_swept_impl
 	qaws_scalar scale;
 	qaws_range path_range;
 	qaws_range prof_range;
+	/* the shared rotation-minimizing field when qaws_surface_swept_set_rmf installed one, else NULL (the Frenet frame) */
+	qaws_sweep_rmf_field* rmf;
 } qaws_surface_swept_impl;
 
-/* dS/du at u for the profile point (px, py) (scaled), and the frame's rates N', B' in u: the Frenet-Serret formulas in the
-   path parameter t, N' = |C'| (-k T + t B), B' = -|C'| t N (k, t: curvature and torsion, from D1 to D3); where D1 x D2
-   vanishes the frame is the constant one qaws_curve_compute_frenet_frame_3d picks, so it does not turn */
+/* dS/du at u for the profile point (px, py) (scaled), and the frame's rates N', B' in u. With the rotation-minimizing
+   field the rates are the field's analytic ones. With the Frenet frame they follow the Frenet-Serret formulas in the path
+   parameter t, N' = |C'| (-k T + t B), B' = -|C'| t N (k, t: curvature and torsion, from D1 to D3); where D1 x D2 vanishes
+   the frame is the constant one qaws_curve_compute_frenet_frame_3d picks, so it does not turn */
 static qaws_status swept_du(qaws_surface_swept_impl const* impl, qaws_scalar u, qaws_scalar px, qaws_scalar py, qaws_vec3* out_du,
 	qaws_vec3* out_dn, qaws_vec3* out_db)
 {
@@ -32,6 +36,26 @@ static qaws_status swept_du(qaws_surface_swept_impl const* impl, qaws_scalar u, 
 	memset(&c, 0, sizeof c);
 	if ((st = qaws_curve_evaluate_3d(&c, impl->path, t_path, QAWS_EVAL_FLAG_D1 | QAWS_EVAL_FLAG_D2 | QAWS_EVAL_FLAG_D3)) != QAWS_STATUS_OK)
 		return st;
+	if (impl->rmf)
+	{
+		/* the field's analytic normal, binormal and their rates with respect to the path parameter */
+		qaws_vec3 dn_t, db_t;
+		st = qaws_sweep_rmf_frame(NULL, NULL, &N, &B, &dn_t, &db_t, impl->rmf, t_path);
+		if (st != QAWS_STATUS_OK)
+			return st;
+		/* dS/du = |dt/du| (C'(t) + px N'(t) + py B'(t)); dn, db as returned are the rates in u */
+		out_du->x = s_path * (c.d1.x + px * dn_t.x + py * db_t.x);
+		out_du->y = s_path * (c.d1.y + px * dn_t.y + py * db_t.y);
+		out_du->z = s_path * (c.d1.z + px * dn_t.z + py * db_t.z);
+		dn.x = s_path * dn_t.x; dn.y = s_path * dn_t.y; dn.z = s_path * dn_t.z;
+		db.x = s_path * db_t.x; db.y = s_path * db_t.y; db.z = s_path * db_t.z;
+		if (out_dn)
+		{
+			out_dn->x = dn.x; out_dn->y = dn.y; out_dn->z = dn.z;
+			out_db->x = db.x; out_db->y = db.y; out_db->z = db.z;
+		}
+		return QAWS_STATUS_OK;
+	}
 	if ((st = qaws_curve_compute_frenet_frame_3d(&T, &N, &B, impl->path, t_path)) != QAWS_STATUS_OK)
 		return st;
 	x[0] = (double)c.d1.y * c.d2.z - (double)c.d1.z * c.d2.y;
@@ -96,11 +120,21 @@ static qaws_status swept_surface_eval(
 		if (s != QAWS_STATUS_OK) return s;
 	}
 
-	/* Get Frenet frame at path point */
+	/* The cross-section frame: the rotation-minimizing field when one is installed, else the Frenet frame.
+	   With the field the position comes from the same field query as the frame, so the two never disagree. */
 	{
-		qaws_status s = qaws_curve_compute_frenet_frame_3d(
-			&T, &N, &B, impl->path, t_path);
-		if (s != QAWS_STATUS_OK) return s;
+		qaws_status s;
+		if (impl->rmf)
+		{
+			qaws_vec3 dn, db;
+			s = qaws_sweep_rmf_frame(&path_r.position, &path_r.d1, &N, &B, &dn, &db, impl->rmf, t_path);
+			if (s != QAWS_STATUS_OK) return s;
+		}
+		else
+		{
+			s = qaws_curve_compute_frenet_frame_3d(&T, &N, &B, impl->path, t_path);
+			if (s != QAWS_STATUS_OK) return s;
+		}
 	}
 
 	/* Evaluate profile (2D) - need position and optionally D1 */
@@ -167,7 +201,8 @@ static qaws_status swept_surface_eval(
 			out_result->valid_flags |= QAWS_SURFACE_EVAL_DU;
 		}
 
-		/* duu: the central difference of the analytic dS/du (one-sided at the ends) */
+		/* duu: the central difference of the analytic dS/du (one-sided at the ends). With the rotation-minimizing field the
+		   field's derivative is the exact derivative of its interpolant, so the difference is consistent across the nodes */
 		if (eval_flags & QAWS_SURFACE_EVAL_DUU)
 		{
 			qaws_scalar h = QAWS_LITERAL(1e-4);
@@ -207,6 +242,9 @@ static qaws_status swept_surface_eval(
 
 static void swept_surface_destroy(void* impl, qaws_allocator const* allocator)
 {
+	qaws_surface_swept_impl* s = (qaws_surface_swept_impl*)impl;
+	if (s && s->rmf)
+		qaws_sweep_rmf_destroy(s->rmf, allocator);
 	qaws_internal_dealloc(impl, allocator);
 }
 
@@ -253,12 +291,14 @@ qaws_status qaws_surface_create_swept_ex(
 		qaws_internal_surface_free(surface);
 		return QAWS_STATUS_ALLOCATION_FAILURE;
 	}
+	memset(impl, 0, sizeof *impl);
 
 	impl->path = desc->path;
 	impl->profile = desc->profile;
 	impl->scale = (desc->scale > 0) ? desc->scale : QAWS_ONE;
 	impl->path_range = qaws_curve_get_parameter_range(desc->path);
 	impl->prof_range = qaws_curve_get_parameter_range(desc->profile);
+	impl->rmf = NULL;
 
 	surface->impl = impl;
 	*out_surface = surface;
@@ -270,4 +310,30 @@ qaws_status qaws_surface_create_swept(
 	qaws_surface_swept_desc const* desc)
 {
 	return qaws_surface_create_swept_ex(out_surface, desc, NULL);
+}
+
+qaws_status qaws_surface_swept_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance)
+{
+	qaws_surface_swept_impl* impl;
+	qaws_sweep_rmf_field* field = NULL;
+	qaws_status status;
+	if (!surface || surface->kind != QAWS_SURFACE_KIND_SWEPT || !surface->impl)
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	impl = (qaws_surface_swept_impl*)surface->impl;
+	if (angular_tolerance == QAWS_ZERO)
+	{
+		/* release the field; the Frenet frame the surface was created with is the behaviour from here on */
+		qaws_sweep_rmf_destroy(impl->rmf, surface->allocator);
+		impl->rmf = NULL;
+		return QAWS_STATUS_OK;
+	}
+	status = qaws_sweep_rmf_create(&field, impl->path, initial_normal, angular_tolerance, surface->allocator);
+	if (status != QAWS_STATUS_OK)
+		return status;
+	qaws_sweep_rmf_destroy(impl->rmf, surface->allocator);
+	impl->rmf = field;
+	return QAWS_STATUS_OK;
 }

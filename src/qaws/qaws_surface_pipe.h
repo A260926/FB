@@ -35,4 +35,18 @@ qaws_status qaws_surface_create_pipe(
 	qaws_surface** out_surface,
 	qaws_surface_pipe_desc const* desc);
 
+/* Choose the cross-section frame of an existing pipe.
+   angular_tolerance > 0 rebuilds the pipe's frame field as the shared rotation-minimizing (Bishop) field
+   (qaws_sweep_rmf.h) over the path, with the target angular error in radians (1e-3 .. 1e-7); initial_normal is
+   projected onto the plane perpendicular to the path's start tangent, and NULL keeps the pipe's original start
+   direction. angular_tolerance == 0 releases the field and restores the pipe's original fixed-table
+   rotation-minimizing (parallel-transport) frames.
+   A pipe created without a call here uses the adaptive field at 1e-5. The pipe's identity and its borrowed path do
+   not change; the field's memory comes from the allocator the pipe was created with. Call it only when no thread is
+   evaluating the pipe. */
+qaws_status qaws_surface_pipe_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance);
+
 #endif /* QAWS_SURFACE_PIPE_H */

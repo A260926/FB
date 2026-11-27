@@ -1,0 +1,4 @@
+/Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/.task-build/library/CMakeFiles/qaws.dir
+/Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/.task-build/library/CMakeFiles/amalgamate.dir
+/Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/.task-build/library/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/.task-build/library/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,3 @@
+# Hashes of file build rules.
+5a32b466de8bbb86c093b2238b6dbed2 CMakeFiles/amalgamate
+b3c352235b44b78d6002236c6757d8f8 amalgam/qaws.h

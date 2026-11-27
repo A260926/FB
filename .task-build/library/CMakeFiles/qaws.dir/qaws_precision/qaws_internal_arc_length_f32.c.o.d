@@ -1,0 +1,32 @@
+CMakeFiles/qaws.dir/qaws_precision/qaws_internal_arc_length_f32.c.o: \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/.task-build/library/qaws_precision/qaws_internal_arc_length_f32.c \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/qaws_internal_arc_length.c \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/qaws_internal_arc_length.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/qaws_internal_types.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/../qaws_types.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/../qaws_platform.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/math.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_symbol_aliasing.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/sys/_posix_availability.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/ptrcheck.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/Availability.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternal.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/AvailabilityInternalLegacy.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/float.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/../qaws_precision.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/../qaws_names.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/stddef.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stddef.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_header_macro.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_ptrdiff_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_size_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_wchar_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_max_align_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_offsetof.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/../qaws_allocator.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/../qaws_status.h \
+  /Volumes/UserFBWorkspace/questions/FS1E1A11E27CEAU12189/attempts/20261127T161013130994Z/repo/src/qaws/internal/qaws_internal_span.h

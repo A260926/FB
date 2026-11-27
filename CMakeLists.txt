@@ -161,6 +161,7 @@ src/qaws/mesh/qaws_mesh_intersect.c
   src/qaws/qaws_surface_bspline.c
   src/qaws/qaws_surface_nurbs.c
   src/qaws/qaws_surface_swept.c
+  src/qaws/qaws_sweep_rmf.c
   src/qaws/qaws_surface_ruled.c
   src/qaws/qaws_surface_coons.c
   src/qaws/qaws_surface_extrusion.c
@@ -670,6 +671,7 @@ if(QAWS_INSTALL)
       src/qaws/qaws_surface_bspline.h
       src/qaws/qaws_surface_nurbs.h
       src/qaws/qaws_surface_swept.h
+      src/qaws/qaws_sweep_rmf.h
       src/qaws/qaws_surface_ruled.h
       src/qaws/qaws_surface_coons.h
       src/qaws/qaws_surface_extrusion.h

@@ -40,4 +40,16 @@ qaws_status qaws_surface_create_swept(
 	qaws_surface** out_surface,
 	qaws_surface_swept_desc const* desc);
 
+/* Choose the cross-section frame of an existing swept surface.
+   angular_tolerance > 0 builds and installs the shared rotation-minimizing (Bishop) frame field
+   (qaws_sweep_rmf.h) over the path, with the target angular error in radians (1e-3 .. 1e-7); initial_normal is
+   projected onto the plane perpendicular to the path's start tangent, and NULL keeps the frame's default start.
+   angular_tolerance == 0 releases the field and restores the surface's original Frenet frame behaviour.
+   The surface's identity and its borrowed path and profile do not change; the field's memory comes from the
+   allocator the surface was created with. Call it only when no thread is evaluating the surface. */
+qaws_status qaws_surface_swept_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance);
+
 #endif /* QAWS_SURFACE_SWEPT_H */

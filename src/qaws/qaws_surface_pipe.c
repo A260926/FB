@@ -1,6 +1,7 @@
 #include "qaws_surface_pipe.h"
 #include "qaws_eval.h"
 #include "qaws_inspect.h"
+#include "qaws_sweep_rmf.h"
 #include "internal/qaws_internal_surface.h"
 #include "internal/qaws_internal_curve.h"
 #include "core/qaws_frame_core.h"
@@ -10,6 +11,8 @@
 #include "qaws_platform.h"
 
 #define PIPE_FRAME_SAMPLES 256
+/* a pipe created without qaws_surface_pipe_set_rmf builds the adaptive field at this angular tolerance */
+#define PIPE_DEFAULT_RMF_TOLERANCE QAWS_LITERAL(1e-5)
 
 typedef struct qaws_surface_pipe_impl
 {
@@ -17,6 +20,8 @@ typedef struct qaws_surface_pipe_impl
 	qaws_range path_range;
 	qaws_scalar radius_x;
 	qaws_scalar radius_y;
+	/* the adaptive rotation-minimizing field (qaws_sweep_rmf.h) when installed; NULL keeps the original fixed table */
+	qaws_sweep_rmf_field* rmf;
 	/* rotation-minimizing frames at uniform u samples, by double reflection (Wang et al. 2008): the path's point and unit
 	   tangent there, the frame's normal and binormal */
 	qaws_vec3 frame_P[PIPE_FRAME_SAMPLES + 1];
@@ -120,17 +125,35 @@ static void precompute_frames(qaws_surface_pipe_impl* impl)
 	}
 }
 
-/* the frame at u: one double reflection from the sample at or below u, so it meets the samples and is smooth between */
-static void pipe_frame(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_eval_result_3d* c, qaws_vec3* T, qaws_vec3* N, qaws_vec3* B)
+/* the frame at u: the shared rotation-minimizing field when one is installed (its normal, binormal and their rates), else
+   the original fixed table's one double reflection from the sample at or below u */
+static void pipe_frame(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_eval_result_3d* c, qaws_vec3* T, qaws_vec3* N,
+	qaws_vec3* B)
 {
-	qaws_scalar ui = u * (qaws_scalar)PIPE_FRAME_SAMPLES;
-	unsigned int i = ui <= QAWS_ZERO ? 0 : ui >= (qaws_scalar)PIPE_FRAME_SAMPLES ? PIPE_FRAME_SAMPLES - 1 : (unsigned int)ui;
-	pipe_path(impl, u, impl->frame_T[i], c, T);
-	pipe_reflect(impl->frame_P[i], impl->frame_T[i], impl->frame_N[i], c->position, *T, N, B);
+	if (impl->rmf)
+	{
+		qaws_scalar s_path = impl->path_range.max_value - impl->path_range.min_value;
+		qaws_scalar t = impl->path_range.min_value + u * s_path;
+		qaws_vec3 pos;
+		memset(c, 0, sizeof *c);
+		qaws_sweep_rmf_frame(&pos, &c->d1, N, B, NULL, NULL, impl->rmf, t);
+		c->position = pos;
+		*T = c->d1;
+		v3_norm(T);
+		qaws_curve_evaluate_3d(c, impl->path, t, QAWS_EVAL_FLAG_POSITION | QAWS_EVAL_FLAG_D1 | QAWS_EVAL_FLAG_D2);
+		return;
+	}
+	{
+		qaws_scalar ui = u * (qaws_scalar)PIPE_FRAME_SAMPLES;
+		unsigned int i = ui <= QAWS_ZERO ? 0 : ui >= (qaws_scalar)PIPE_FRAME_SAMPLES ? PIPE_FRAME_SAMPLES - 1 : (unsigned int)ui;
+		pipe_path(impl, u, impl->frame_T[i], c, T);
+		pipe_reflect(impl->frame_P[i], impl->frame_T[i], impl->frame_N[i], c->position, *T, N, B);
+	}
 }
 
-/* dS/du at (u, cos and sin of the angle), and the frame's rates in u: a rotation-minimizing frame turns with the tangent
-   only, N' = -(T' . N) T, B' = -(T' . B) T, with T' = (C'' - (C'' . T) T) / |C'| */
+/* dS/du at (u, cos and sin of the angle), and the frame's rates in u. With the field the rates are its analytic ones; with
+   the fixed table a rotation-minimizing frame turns with the tangent only, N' = -(T' . N) T, B' = -(T' . B) T, with
+   T' = (C'' - (C'' . T) T) / |C'| */
 static void pipe_du(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_scalar ca, qaws_scalar sa, qaws_vec3* out_du,
 	qaws_vec3* out_dn, qaws_vec3* out_db)
 {
@@ -138,6 +161,27 @@ static void pipe_du(qaws_surface_pipe_impl const* impl, qaws_scalar u, qaws_scal
 	qaws_eval_result_3d c;
 	qaws_vec3 T, N, B, dt = { 0, 0, 0 }, dn, db;
 	qaws_scalar sp, kn, kb;
+	if (impl->rmf)
+	{
+		qaws_vec3 dnf, dbf, pos;
+		qaws_scalar t = impl->path_range.min_value + u * s_path;
+		memset(&c, 0, sizeof c);
+		qaws_sweep_rmf_frame(&pos, &c.d1, &N, &B, &dnf, &dbf, impl->rmf, t);
+		c.position = pos;
+		qaws_curve_evaluate_3d(&c, impl->path, t, QAWS_EVAL_FLAG_POSITION | QAWS_EVAL_FLAG_D1 | QAWS_EVAL_FLAG_D2);
+		/* the field's rates are with respect to the path parameter; u spans s_path */
+		dn.x = s_path * dnf.x; dn.y = s_path * dnf.y; dn.z = s_path * dnf.z;
+		db.x = s_path * dbf.x; db.y = s_path * dbf.y; db.z = s_path * dbf.z;
+		out_du->x = s_path * c.d1.x + impl->radius_x * ca * dn.x + impl->radius_y * sa * db.x;
+		out_du->y = s_path * c.d1.y + impl->radius_x * ca * dn.y + impl->radius_y * sa * db.y;
+		out_du->z = s_path * c.d1.z + impl->radius_x * ca * dn.z + impl->radius_y * sa * db.z;
+		if (out_dn)
+		{
+			*out_dn = dn;
+			*out_db = db;
+		}
+		return;
+	}
 	pipe_frame(impl, u, &c, &T, &N, &B);
 	sp = v3_len(c.d1);
 	if (sp > QAWS_LITERAL(1e-15))
@@ -227,18 +271,19 @@ static qaws_status pipe_surface_eval(
 		out_result->valid_flags |= QAWS_SURFACE_EVAL_DVV;
 	}
 
-	if (eval_flags & (QAWS_SURFACE_EVAL_DU | QAWS_SURFACE_EVAL_DUU | QAWS_SURFACE_EVAL_DUV))
+	if (eval_flags & (QAWS_SURFACE_EVAL_DU | QAWS_SURFACE_EVAL_DUU | QAWS_SURFACE_EVAL_DUV | QAWS_SURFACE_EVAL_NORMAL))
 	{
 		qaws_vec3 du, dn, db;
 		pipe_du(impl, u, cos_theta, sin_theta, &du, &dn, &db);
 
-		if (eval_flags & QAWS_SURFACE_EVAL_DU)
+		if (eval_flags & (QAWS_SURFACE_EVAL_DU | QAWS_SURFACE_EVAL_NORMAL))
 		{
 			out_result->du = du;
 			out_result->valid_flags |= QAWS_SURFACE_EVAL_DU;
 		}
 
-		/* duu: the central difference of the analytic dS/du (one-sided at the ends) */
+		/* duu: the central difference of the analytic dS/du (one-sided at the ends). With the rotation-minimizing field the
+		   derivative comes from the exact derivative of its interpolant, so it stays consistent across the nodes */
 		if (eval_flags & QAWS_SURFACE_EVAL_DUU)
 		{
 			qaws_scalar h = QAWS_LITERAL(1e-4);
@@ -274,6 +319,9 @@ static qaws_status pipe_surface_eval(
 
 static void pipe_surface_destroy(void* impl, qaws_allocator const* allocator)
 {
+	qaws_surface_pipe_impl* p = (qaws_surface_pipe_impl*)impl;
+	if (p && p->rmf)
+		qaws_sweep_rmf_destroy(p->rmf, allocator);
 	qaws_internal_dealloc(impl, allocator);
 }
 
@@ -322,14 +370,26 @@ qaws_status qaws_surface_create_pipe_ex(
 		qaws_internal_surface_free(surface);
 		return QAWS_STATUS_ALLOCATION_FAILURE;
 	}
+	memset(impl, 0, sizeof *impl);
 
 	impl->path = desc->path;
 	impl->path_range = qaws_curve_get_parameter_range(desc->path);
 	impl->radius_x = desc->radius_x;
 	impl->radius_y = ry;
+	impl->rmf = NULL;
 
-	/* rotation-minimizing frames along the path */
+	/* the original fixed-table rotation-minimizing frames, kept for qaws_surface_pipe_set_rmf(..., 0) */
 	precompute_frames(impl);
+
+	/* by default the pipe uses the adaptive rotation-minimizing field at 1e-5 */
+	{
+		qaws_status rmf_status = qaws_sweep_rmf_create(&impl->rmf, desc->path, NULL, PIPE_DEFAULT_RMF_TOLERANCE, allocator);
+		if (rmf_status != QAWS_STATUS_OK)
+		{
+			/* the table is still there: the pipe works with its original behaviour rather than failing to exist */
+			impl->rmf = NULL;
+		}
+	}
 
 	surface->impl = impl;
 	*out_surface = surface;
@@ -341,4 +401,30 @@ qaws_status qaws_surface_create_pipe(
 	qaws_surface_pipe_desc const* desc)
 {
 	return qaws_surface_create_pipe_ex(out_surface, desc, NULL);
+}
+
+qaws_status qaws_surface_pipe_set_rmf(
+	qaws_surface* surface,
+	qaws_vec3 const* initial_normal,
+	qaws_scalar angular_tolerance)
+{
+	qaws_surface_pipe_impl* impl;
+	qaws_sweep_rmf_field* field = NULL;
+	qaws_status status;
+	if (!surface || surface->kind != QAWS_SURFACE_KIND_PIPE || !surface->impl)
+		return QAWS_STATUS_INVALID_ARGUMENT;
+	impl = (qaws_surface_pipe_impl*)surface->impl;
+	if (angular_tolerance == QAWS_ZERO)
+	{
+		/* release the field; the original fixed-table rotation-minimizing frames are the behaviour from here on */
+		qaws_sweep_rmf_destroy(impl->rmf, surface->allocator);
+		impl->rmf = NULL;
+		return QAWS_STATUS_OK;
+	}
+	status = qaws_sweep_rmf_create(&field, impl->path, initial_normal, angular_tolerance, surface->allocator);
+	if (status != QAWS_STATUS_OK)
+		return status;
+	qaws_sweep_rmf_destroy(impl->rmf, surface->allocator);
+	impl->rmf = field;
+	return QAWS_STATUS_OK;
 }
