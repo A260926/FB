@@ -72,16 +72,35 @@ static fcml_uint32_t decode_compressed_disp8(
     return n;
 }
 
+static fcml_uint64_t integer_to_unsigned_raw(const fcml_st_integer *integer) {
+    switch (integer->size) {
+    case FCML_DS_8:
+        return (fcml_uint8_t) integer->int8;
+    case FCML_DS_16:
+        return (fcml_uint16_t) integer->int16;
+    case FCML_DS_32:
+        return (fcml_uint32_t) integer->int32;
+    case FCML_DS_64:
+        return (fcml_uint64_t) integer->int64;
+    default:
+        return 0;
+    }
+}
+
 static fcml_ceh_error decode_displacement(
         fcml_st_modrm_decoder_context *context,
         fcml_st_memory_stream *stream, fcml_st_integer *displacement,
-        fcml_st_modrm_displacement *raw_displacement, fcml_st_offset *offset,
+        fcml_st_modrm_displacement *raw_displacement,
+        fcml_st_modrm_displacement_origin *origin, fcml_st_offset *offset,
         fcml_usize size, fcml_usize offset_extension_size,
         fcml_usize displacement_extension_size) {
 
     fcml_ceh_error error = FCML_CEH_GEC_NO_ERROR;
 
     fcml_st_integer integer = {0};
+
+    /* Remember where the displacement bytes start before consuming them. */
+    fcml_usize field_offset = (fcml_usize) stream->offset;
 
     error = fcml_fn_utils_decode_integer(stream, &integer, size);
     if (error) {
@@ -92,6 +111,14 @@ static fcml_ceh_error decode_displacement(
     integer.is_signed = FCML_TRUE;
 
     raw_displacement->displacement = integer;
+
+    /* Keep the physical origin of the encoded bytes. The value is captured
+     * before the compressed disp8*N scaling below, so it always reflects the
+     * single byte (or wider displacement) as it appears in the instruction. */
+    origin->is_present = FCML_TRUE;
+    origin->offset = field_offset;
+    origin->size = size / 8;
+    origin->raw_value = integer_to_unsigned_raw(&integer);
 
     /* This method modifies displacement in place when needed. */
     fcml_uint32_t n = decode_compressed_disp8(context, size,
@@ -172,7 +199,9 @@ static fcml_ceh_error decode_16bit(fcml_st_modrm_decoder_context *context,
         /* disp16.*/
         fcml_ceh_error error = decode_displacement(context,
                 stream, &(effective_address->displacement),
-                &(modrm_details->displacement), &( address->offset), FCML_DS_16,
+                &(modrm_details->displacement),
+                &(modrm_details->displacement_origin), &( address->offset),
+                FCML_DS_16,
                 context->effective_address_size,
                 get_displacement_extension(context, flags));
         if (error) {
@@ -187,7 +216,8 @@ static fcml_ceh_error decode_16bit(fcml_st_modrm_decoder_context *context,
         if (f_mod > 0) {
             fcml_ceh_error error = decode_displacement(context,
                     stream, &(effective_address->displacement),
-                    &(modrm_details->displacement), NULL,
+                    &(modrm_details->displacement),
+                    &(modrm_details->displacement_origin), NULL,
                     (f_mod == 1) ? FCML_DS_8 : FCML_DS_16, 0,
                     get_displacement_extension(context, flags));
             if ( error ) {
@@ -272,7 +302,9 @@ static fcml_ceh_error decode_sib(fcml_st_modrm_decoder_context *context,
         /* In this case base register doesn't exist.*/
         error = decode_displacement(context,
                 stream, &(effective_address->displacement),
-                &(modrm_details->displacement), &(address->offset), FCML_DS_32,
+                &(modrm_details->displacement),
+                &(modrm_details->displacement_origin), &(address->offset),
+                FCML_DS_32,
                 effective_address_size, 0);
     } else {
         /* Effective address size affects base register.*/
@@ -285,7 +317,8 @@ static fcml_ceh_error decode_sib(fcml_st_modrm_decoder_context *context,
         if (f_mod > 0) {
             error = decode_displacement(context, stream,
                     &(effective_address->displacement),
-                    &(modrm_details->displacement), NULL,
+                    &(modrm_details->displacement),
+                    &(modrm_details->displacement_origin), NULL,
                     (f_mod == 1) ? FCML_DS_8 : FCML_DS_32, 0,
                     get_displacement_extension(context, flags));
         }
@@ -356,7 +389,8 @@ static fcml_ceh_error decode_3264bit(fcml_st_modrm_decoder_context *context,
          */
         error = decode_displacement(context, stream,
                 &(effective_address->displacement),
-                &(modrm_details->displacement), &(address->offset),
+                &(modrm_details->displacement),
+                &(modrm_details->displacement_origin), &(address->offset),
                 FCML_DS_32, decoded_modrm->is_rip
                     ? 0 : effective_address_size, 0);
         if (error) {
@@ -373,7 +407,8 @@ static fcml_ceh_error decode_3264bit(fcml_st_modrm_decoder_context *context,
         if (f_mod != 0) {
             error = decode_displacement(context, stream,
                     &(effective_address->displacement),
-                    &(modrm_details->displacement), NULL,
+                    &(modrm_details->displacement),
+                    &(modrm_details->displacement_origin), NULL,
                     (f_mod == 1) ? FCML_DS_8 : FCML_DS_32, 0,
                     get_displacement_extension(context, flags));
             if (error) {
@@ -429,6 +464,9 @@ fcml_ceh_error fcml_fn_modrm_decode(
         fcml_uint8_t flags) {
     fcml_ceh_error error = FCML_CEH_GEC_NO_ERROR;
     fcml_fn_env_memory_clear(decoded_modrm, sizeof(fcml_st_modrm));
+    /* Never carry displacement origin over from a previous decoding. */
+    fcml_fn_env_memory_clear(&(modrm_details->displacement_origin),
+            sizeof(fcml_st_modrm_displacement_origin));
     if (context->effective_address_size == FCML_DS_16) {
         error = decode_16bit(
                 context, modrm_source, decoded_modrm, modrm_details, flags);

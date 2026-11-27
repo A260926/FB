@@ -89,6 +89,32 @@ extern "C" {
 
 /** @} */
 
+/**
+ * Optional callback used to replace a rendered number by a user provided
+ * symbol. It is invoked once for every number that has a real encoded field
+ * (immediates, relative branches, ModR/M displacements, moffs and the two
+ * parts of a far pointer). Numbers derived from registers, implicit
+ * constants or any other value that does not have encoded bytes never
+ * trigger the callback.
+ *
+ * The callback receives the user context set in fcml_st_render_config, the
+ * index of the operand in the final disassembler result (the same index the
+ * dialects render, so it works for the GAS operand order as well), the
+ * encoded field that produced the number and the exact fcml_st_integer value
+ * that is about to be rendered.
+ *
+ * @param context User context provided through fcml_st_render_config.
+ * @param operand_index Index of the operand in the disassembler result.
+ * @param field Encoded field backing the rendered number.
+ * @param value The value that would be rendered without a resolver.
+ * @return A borrowed, NUL terminated string used in place of the number, or
+ * NULL to keep the default numeric rendering. The string is only used for
+ * the duration of the fcml_fn_render() call.
+ */
+typedef fcml_string (*fcml_fnp_symbol_resolver)(fcml_ptr context,
+        fcml_int operand_index, const fcml_st_encoded_field *field,
+        const fcml_st_integer *value);
+
 /** Renderer configuration. */
 typedef struct fcml_st_render_config {
     /** Flags which allows to control rendering process. */
@@ -97,6 +123,11 @@ typedef struct fcml_st_render_config {
     fcml_uint16_t prefered_mnemonic_padding;
     /** Preferred code padding in HEX bytes (2 characters on one byte.). */
     fcml_uint16_t prefered_code_padding;
+    /** Optional callback replacing encoded numbers by symbols. NULL keeps
+     * the default numeric rendering. */
+    fcml_fnp_symbol_resolver symbol_resolver;
+    /** Opaque user context passed unchanged to symbol_resolver. */
+    fcml_ptr symbol_context;
 } fcml_st_render_config;
 
 /**

@@ -1265,11 +1265,88 @@ public:
     };
 
     /**
+     * Role of an encoded field.
+     * @since 1.3.1
+     */
+    enum EncodedFieldKind {
+        /** Regular immediate value. */
+        EFK_IMMEDIATE = FCML_EFK_IMMEDIATE,
+        /** Relative branch displacement. */
+        EFK_RELATIVE_BRANCH = FCML_EFK_RELATIVE_BRANCH,
+        /** ModR/M (and optional SIB) displacement. */
+        EFK_MODRM_DISPLACEMENT = FCML_EFK_MODRM_DISPLACEMENT,
+        /** Absolute moffs offset. */
+        EFK_MOFFS = FCML_EFK_MOFFS,
+        /** Offset part of a far pointer. */
+        EFK_FAR_OFFSET = FCML_EFK_FAR_OFFSET,
+        /** Segment part of a far pointer. */
+        EFK_FAR_SEGMENT = FCML_EFK_FAR_SEGMENT
+    };
+
+    /**
+     * One field physically encoded in the instruction bytes.
+     * @since 1.3.1
+     */
+    class EncodedField {
+    public:
+
+        EncodedField() :
+                _kind(EFK_IMMEDIATE), _offset(0), _size(0), _rawValue(0) {
+        }
+
+        /** Gets the role of the field. @since 1.3.1 */
+        EncodedFieldKind getKind() const {
+            return _kind;
+        }
+
+        /** Sets the role of the field. @since 1.3.1 */
+        void setKind(EncodedFieldKind kind) {
+            _kind = kind;
+        }
+
+        /** Gets the offset from the first instruction byte. @since 1.3.1 */
+        fcml_usize getOffset() const {
+            return _offset;
+        }
+
+        /** Sets the offset from the first instruction byte. @since 1.3.1 */
+        void setOffset(fcml_usize offset) {
+            _offset = offset;
+        }
+
+        /** Gets the field size in bytes. @since 1.3.1 */
+        fcml_usize getSize() const {
+            return _size;
+        }
+
+        /** Sets the field size in bytes. @since 1.3.1 */
+        void setSize(fcml_usize size) {
+            _size = size;
+        }
+
+        /** Gets the raw little-endian, zero-extended value. @since 1.3.1 */
+        fcml_uint64_t getRawValue() const {
+            return _rawValue;
+        }
+
+        /** Sets the raw little-endian value. @since 1.3.1 */
+        void setRawValue(fcml_uint64_t rawValue) {
+            _rawValue = rawValue;
+        }
+
+    private:
+        EncodedFieldKind _kind;
+        fcml_usize _offset;
+        fcml_usize _size;
+        fcml_uint64_t _rawValue;
+    };
+
+    /**
      * Creates default operand details with an undefined access mode.
      * @since 1.1.0
      */
     OperandDetails() :
-            _accessMode(AM_ACCESS_MODE_UNDEFINED) {
+            _accessMode(AM_ACCESS_MODE_UNDEFINED), _encodedFieldCount(0) {
     }
 
     /**
@@ -1279,7 +1356,7 @@ public:
      * @since 1.1.0
      */
     OperandDetails(AccessMode accessMode) :
-            _accessMode(accessMode) {
+            _accessMode(accessMode), _encodedFieldCount(0) {
     }
 
     /**
@@ -1302,9 +1379,50 @@ public:
         _accessMode = accessMode;
     }
 
+    /**
+     * Gets the number of encoded fields backing the operand.
+     *
+     * @return Number of encoded fields.
+     * @since 1.3.1
+     */
+    fcml_int getEncodedFieldCount() const {
+        return _encodedFieldCount;
+    }
+
+    /**
+     * Gets an encoded field by index.
+     *
+     * @param index Field index, from 0 to getEncodedFieldCount() - 1.
+     * @return The requested encoded field.
+     * @since 1.3.1
+     */
+    const EncodedField& getEncodedField(fcml_int index) const {
+        return _encodedFields[index];
+    }
+
+    /**
+     * Stores an encoded field. Returns false when the per-operand capacity is
+     * reached.
+     *
+     * @param field The field to store.
+     * @return True if the field was stored.
+     * @since 1.3.1
+     */
+    bool addEncodedField(const EncodedField &field) {
+        if (_encodedFieldCount >= FCML_DASM_ENCODED_FIELDS_PER_OPERAND) {
+            return false;
+        }
+        _encodedFields[_encodedFieldCount++] = field;
+        return true;
+    }
+
 private:
     /** Operan's access mode. */
     AccessMode _accessMode;
+    /** Encoded fields backing the operand. */
+    EncodedField _encodedFields[FCML_DASM_ENCODED_FIELDS_PER_OPERAND];
+    /** Number of stored encoded fields. */
+    fcml_int _encodedFieldCount;
 };
 
 /** ModRM details.
@@ -2044,12 +2162,33 @@ public:
             OperandDetails &dest) {
         dest.setAccessMode(
                 static_cast<OperandDetails::AccessMode>(src.access_mode));
+        for (fcml_int i = 0; i < src.encoded_field_count; i++) {
+            const fcml_st_encoded_field &source = src.encoded_fields[i];
+            OperandDetails::EncodedField field;
+            field.setKind(static_cast<OperandDetails::EncodedFieldKind>(
+                    source.kind));
+            field.setOffset(source.offset);
+            field.setSize(source.size);
+            field.setRawValue(source.raw_value);
+            dest.addEncodedField(field);
+        }
     }
 
     static void convert(const OperandDetails &src,
             fcml_st_operand_details &dest) {
         dest.access_mode =
                 static_cast<fcml_en_access_mode>(src.getAccessMode());
+        dest.encoded_field_count = src.getEncodedFieldCount();
+        for (fcml_int i = 0; i < src.getEncodedFieldCount(); i++) {
+            const OperandDetails::EncodedField &source =
+                    src.getEncodedField(i);
+            fcml_st_encoded_field &target = dest.encoded_fields[i];
+            target.kind = static_cast<fcml_en_encoded_field_kind>(
+                    source.getKind());
+            target.offset = source.getOffset();
+            target.size = source.getSize();
+            target.raw_value = source.getRawValue();
+        }
     }
 
     static void convert(const fcml_st_instruction_prefix &src,

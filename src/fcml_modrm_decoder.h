@@ -60,6 +60,23 @@ typedef struct fcml_st_modrm_displacement {
     fcml_nuint32_t N;
 } fcml_st_modrm_displacement;
 
+/**
+ * Physical location of the encoded displacement bytes. The offset is
+ * relative to the first byte of the instruction and raw_value keeps the
+ * little-endian value of those bytes before any sign extension or disp8*N
+ * scaling.
+ */
+typedef struct fcml_st_modrm_displacement_origin {
+    /** True if a displacement is encoded for the instruction. */
+    fcml_bool is_present;
+    /** Offset of the first displacement byte from the instruction start. */
+    fcml_usize offset;
+    /** Number of bytes occupied by the displacement. */
+    fcml_usize size;
+    /** Raw unsigned little-endian value of the displacement bytes. */
+    fcml_uint64_t raw_value;
+} fcml_st_modrm_displacement_origin;
+
 typedef struct fcml_st_modrm_details {
     /** ModR/M byte. */
     fcml_uint8_t modrm;
@@ -67,6 +84,8 @@ typedef struct fcml_st_modrm_details {
     fcml_nuint8_t sib;
     /** Displacement as it is encoded in the instruction. */
     fcml_st_modrm_displacement displacement;
+    /** Physical location of the encoded displacement bytes. */
+    fcml_st_modrm_displacement_origin displacement_origin;
 } fcml_st_modrm_details;
 
 typedef struct fcml_st_modrm_decoder_context {

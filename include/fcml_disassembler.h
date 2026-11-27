@@ -41,6 +41,66 @@ extern "C" {
 /** Maximal number of instruction prefixes. */
 #define FCML_DASM_PREFIXES_COUNT	12
 
+/** Maximal number of encoded fields that can back a single operand. */
+#define FCML_DASM_ENCODED_FIELDS_PER_OPERAND	2
+
+/**
+ * Kind of an encoded instruction field. It describes how the raw bytes
+ * referenced by an fcml_st_encoded_field field have to be interpreted.
+ */
+typedef enum fcml_en_encoded_field_kind {
+    /** Regular immediate value. */
+    FCML_EFK_IMMEDIATE = 0,
+    /** Relative displacement used by direct branches. The disassembler
+     * converts it to an absolute offset, but the field still carries the
+     * raw relative value as it is encoded in the instruction. */
+    FCML_EFK_RELATIVE_BRANCH,
+    /** Displacement encoded as part of the ModR/M (and optional SIB)
+     * addressing form. This covers both plain displacements and EVEX
+     * compressed disp8*N values; the field keeps the byte before scaling. */
+    FCML_EFK_MODRM_DISPLACEMENT,
+    /** Absolute offset of an moffs operand. */
+    FCML_EFK_MOFFS,
+    /** Offset part of a direct far pointer. */
+    FCML_EFK_FAR_OFFSET,
+    /** Segment part of a direct far pointer. */
+    FCML_EFK_FAR_SEGMENT
+} fcml_en_encoded_field_kind;
+
+/**
+ * Describes one field physically encoded in the instruction bytes.
+ * The offset is always relative to the first byte of the instruction the
+ * field belongs to, the size is given in bytes and raw_value holds the
+ * original little-endian, zero extended, unsigned value of those bytes.
+ * Unlike the semantic operand values, raw_value is never sign extended and
+ * RIP/IP relative values are not converted to absolute addresses.
+ */
+typedef struct fcml_st_encoded_field {
+    /** Role of the encoded field. */
+    fcml_en_encoded_field_kind kind;
+    /** Offset of the first byte of the field, from the first instruction
+     * byte. */
+    fcml_usize offset;
+    /** Size of the field in bytes. */
+    fcml_usize size;
+    /** Raw little-endian value of the field, zero extended and interpreted
+     * as an unsigned integer. */
+    fcml_uint64_t raw_value;
+} fcml_st_encoded_field;
+
+/** Some additional disassembler specific information about decoded operands. */
+typedef struct fcml_st_operand_details {
+    /** Instruction operand access mode READ, WRITE or both. */
+    fcml_en_access_mode access_mode;
+    /** Encoded fields that back this operand. Only operands that materialize
+     * as explicit numbers in the rendered instruction expose fields here;
+     * implicit constants and registers have none. */
+    fcml_st_encoded_field encoded_fields[
+            FCML_DASM_ENCODED_FIELDS_PER_OPERAND];
+    /** Number of entries available in encoded_fields. */
+    fcml_int encoded_field_count;
+} fcml_st_operand_details;
+
 /** First group of conditional suffixes (See FCML manual). */
 #define FCML_DASM_CONDITIONAL_GROUP_1	0x00
 /** Second group of conditional suffixes (See FCML manual). */
@@ -186,12 +246,6 @@ typedef struct fcml_st_prefixes_details {
     /** Embedded opmask register specifier. */
     fcml_uint8_t aaa;
 } fcml_st_prefixes_details;
-
-/** Some additional disassembler specific information about decoded operands. */
-typedef struct fcml_st_operand_details {
-    /** Instruction operand access mode READ, WRITE or both. */
-    fcml_en_access_mode access_mode;
-} fcml_st_operand_details;
 
 /**
  * Displacement in raw form.

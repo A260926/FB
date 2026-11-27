@@ -61,6 +61,23 @@ fcml_ceh_error fcml_fn_rend_utils_format_append_integer(
         const fcml_st_integer *integer, fcml_bool is_hex,
         fcml_bool remove_leading_zeros);
 
+/* Finds an encoded field of the requested kind for a given operand, or NULL
+ * if the operand has no such field. */
+const fcml_st_encoded_field *fcml_fn_rend_utils_find_encoded_field(
+        const fcml_st_disassembler_result *result, fcml_int operand_index,
+        fcml_en_encoded_field_kind kind);
+
+/* Appends an integer, giving the configured symbol resolver a chance to
+ * replace it. The resolver is invoked at most once and only when the operand
+ * really exposes an encoded field of the given kind; otherwise, or when the
+ * resolver returns NULL, the number is rendered through the normal path. */
+fcml_ceh_error fcml_fn_rend_utils_append_resolvable_integer(
+        fcml_string patterns[6][4], const fcml_st_render_config *config,
+        fcml_st_memory_stream *stream,
+        const fcml_st_disassembler_result *result, fcml_int operand_index,
+        fcml_en_encoded_field_kind kind, const fcml_st_integer *integer,
+        fcml_bool is_hex, fcml_bool remove_leading_zeros);
+
 void fcml_fn_rend_utils_format_append_reg(
         const fcml_st_dialect_context_int *dialect_context,
         fcml_st_memory_stream *stream, const fcml_st_register *reg,

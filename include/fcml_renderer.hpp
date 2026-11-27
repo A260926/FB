@@ -60,7 +60,9 @@ public:
             _throwExceptionOnError(true),
             _renderFlags(0),
             _preferedMnemonicPadding(FCML_REND_DEFAULT_MNEMONIC_PADDING),
-            _preferedCodePadding(FCML_REND_DEFAULT_CODE_PADDING) {
+            _preferedCodePadding(FCML_REND_DEFAULT_CODE_PADDING),
+            _symbolResolver(NULL),
+            _symbolContext(NULL) {
     }
 
     /**
@@ -73,7 +75,9 @@ public:
             _throwExceptionOnError(true),
             _renderFlags(renderFlags),
             _preferedMnemonicPadding(0),
-            _preferedCodePadding(0) {
+            _preferedCodePadding(0),
+            _symbolResolver(NULL),
+            _symbolContext(NULL) {
     }
 
     /** @since 1.1.0 */
@@ -128,6 +132,46 @@ public:
         _throwExceptionOnError = throwExceptionOnError;
     }
 
+    /**
+     * Gets the optional symbol resolver callback.
+     *
+     * @return The symbol resolver or NULL when number rendering is used.
+     * @since 1.3.1
+     */
+    fcml_fnp_symbol_resolver getSymbolResolver() const {
+        return _symbolResolver;
+    }
+
+    /**
+     * Sets the optional symbol resolver callback.
+     *
+     * @param symbolResolver Callback replacing encoded numbers by symbols.
+     * @since 1.3.1
+     */
+    void setSymbolResolver(fcml_fnp_symbol_resolver symbolResolver) {
+        _symbolResolver = symbolResolver;
+    }
+
+    /**
+     * Gets the opaque context handed to the symbol resolver.
+     *
+     * @return User context.
+     * @since 1.3.1
+     */
+    fcml_ptr getSymbolContext() const {
+        return _symbolContext;
+    }
+
+    /**
+     * Sets the opaque context handed to the symbol resolver.
+     *
+     * @param symbolContext User context.
+     * @since 1.3.1
+     */
+    void setSymbolContext(fcml_ptr symbolContext) {
+        _symbolContext = symbolContext;
+    }
+
 private:
 
     /** Throws exception in case of error. */
@@ -138,6 +182,10 @@ private:
     fcml_uint16_t _preferedMnemonicPadding;
     /** Preferred code padding in HEX bytes (2 characters on one byte.). */
     fcml_uint16_t _preferedCodePadding;
+    /** Optional callback replacing encoded numbers by symbols. */
+    fcml_fnp_symbol_resolver _symbolResolver;
+    /** Opaque context passed to the symbol resolver. */
+    fcml_ptr _symbolContext;
 
 };
 
@@ -153,6 +201,8 @@ public:
         dest.prefered_code_padding = src.getPreferedCodePadding();
         dest.prefered_mnemonic_padding = src.getPreferedMnemonicPadding();
         dest.render_flags = src.getRenderFlags();
+        dest.symbol_resolver = src.getSymbolResolver();
+        dest.symbol_context = src.getSymbolContext();
     }
 
 };

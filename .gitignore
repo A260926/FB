@@ -39,3 +39,6 @@ test-driver
 configure~
 dist/
 *.log
+
+# Harness build output
+/.task-build/

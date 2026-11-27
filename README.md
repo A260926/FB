@@ -160,6 +160,60 @@ Output:
 adc byte ptr [ecx+eax+2],3
 ```
 
+#### Encoded field origins and symbol resolution
+
+A disassembled number is not always stored the way it is displayed. A one-byte
+`imm8` may be sign-extended to 32 or 64 bits, a relative branch displacement is
+converted to an absolute target, and a RIP-relative address already includes the
+instruction pointer. Scanning the rendered text therefore cannot reliably tell
+you which instruction bytes produced a number.
+
+For every operand that materializes as explicit bytes, the disassembler reports
+the physical origin of those bytes in
+`instruction_details.operand_details[].encoded_fields`. Each
+`fcml_st_encoded_field` records the field `kind`, its `offset` from the first
+instruction byte, its `size` in bytes, and the raw little-endian, zero-extended
+`raw_value`. Implicit constants and register operands have no fields, and an
+EVEX compressed `disp8*N` keeps the single unscaled byte while the semantic
+displacement and the existing `N` factor are left untouched.
+
+The renderer can hand each backed number to an optional
+`symbol_resolver` callback in `fcml_st_render_config`. The callback receives the
+user context, the final operand index (identical in Intel and GAS ordering),
+the encoded field, and the value about to be rendered. Returning a string
+replaces only that number; returning `NULL` keeps the default rendering. The
+`$`, brackets, commas and other syntax are never touched.
+
+```c
+#include <fcml/fcml_disassembler.h>
+#include <fcml/fcml_intel_dialect.h>
+#include <fcml/fcml_renderer.h>
+
+/* Resolve branch targets to symbols; leave every other number alone. */
+static fcml_string resolve_symbol(fcml_ptr context, fcml_int operand_index,
+        const fcml_st_encoded_field *field, const fcml_st_integer *value) {
+    (void) context;
+    (void) operand_index;
+    (void) value;
+    if (field->kind == FCML_EFK_RELATIVE_BRANCH) {
+        return "loop_target";   /* borrowed string, valid during render */
+    }
+    return NULL;                /* keep the numeric rendering */
+}
+
+/* ... decode as usual, then: */
+fcml_st_render_config config = {0};
+config.symbol_resolver = resolve_symbol;
+config.symbol_context = NULL;
+
+fcml_char buffer[FCML_REND_MAX_BUFF_LEN];
+fcml_fn_render(dialect, &config, buffer, sizeof(buffer), &result);
+```
+
+The same encoded bytes back an operand regardless of dialect: the GAS operand
+reversal moves the operand details together with the operand, so the field
+offsets stay valid in both syntaxes.
+
 ### C++
 
 The C++ wrapper provides RAII-managed classes, a fluent instruction builder,
