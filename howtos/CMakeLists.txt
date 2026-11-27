@@ -34,3 +34,14 @@ target_copy_shared_libraries(custom_animation_importer)
 set_target_properties(custom_animation_importer
   PROPERTIES FOLDER "howtos")
 add_test(NAME custom_animation_importer COMMAND custom_animation_importer)
+
+# retarget_animation
+
+add_executable(retarget_animation
+  retarget_animation.cc)
+target_link_libraries(retarget_animation
+  ozz_animation_offline)
+target_copy_shared_libraries(retarget_animation)
+set_target_properties(retarget_animation
+  PROPERTIES FOLDER "howtos")
+add_test(NAME retarget_animation COMMAND retarget_animation)

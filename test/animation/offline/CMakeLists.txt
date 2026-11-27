@@ -120,6 +120,20 @@ add_test(NAME test_raw_animation_archive_versioning_be COMMAND test_raw_animatio
 add_test(NAME test_raw_animation_archive_versioning_le_older2 COMMAND test_raw_animation_archive_versioning "--file=${ozz_media_directory}/bin/versioning/raw_animation_v2_le.ozz" "--tracks=0" "--duration=1" "--name=")
 add_test(NAME test_raw_animation_archive_versioning_le_older1 COMMAND test_raw_animation_archive_versioning "--file=${ozz_media_directory}/bin/versioning/raw_animation_v1_le.ozz" "--tracks=0" "--duration=1" "--name=")
 
+# RawAnimation retargeter
+# retarget_target.cpp provides its own main() (see task_support/check.h), so it
+# isn't linked against gtest.
+add_executable(test_raw_animation_retargeter
+  retarget_target.cpp)
+target_link_libraries(test_raw_animation_retargeter
+  ozz_animation_offline)
+target_include_directories(test_raw_animation_retargeter PRIVATE
+  ${PROJECT_SOURCE_DIR}
+  ${PROJECT_SOURCE_DIR}/task_support)
+target_copy_shared_libraries(test_raw_animation_retargeter)
+set_target_properties(test_raw_animation_retargeter PROPERTIES FOLDER "ozz/tests/animation_offline")
+add_test(NAME test_raw_animation_retargeter COMMAND test_raw_animation_retargeter)
+
 # RawTrack
 add_executable(test_raw_track_archive
   raw_track_archive_tests.cc)
