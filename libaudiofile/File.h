@@ -62,6 +62,14 @@ public:
 	virtual off_t length() = 0;
 	virtual off_t seek(off_t offset, SeekOrigin origin) = 0;
 	virtual off_t tell() = 0;
+	/*
+		Truncate the file to the given length.
+
+		Returns true on success. The default implementation reports
+		failure for file objects which cannot be truncated; callers
+		must not depend on truncation being available.
+	*/
+	virtual bool truncate(off_t length);
 
 	bool canSeek();
 

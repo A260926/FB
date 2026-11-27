@@ -280,6 +280,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		false,	/* needsRebuffer */
 		false,	/* multiple_of */
+		false,	/* stableSyncFlush */
 		_af_pcm_format_ok,
 		_AFpcminitcompress, _AFpcminitdecompress
 	},
@@ -293,6 +294,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		false,	/* needsRebuffer */
 		false,	/* multiple_of */
+		false,	/* stableSyncFlush */
 		_af_g711_format_ok,
 		_AFg711initcompress, _AFg711initdecompress
 	},
@@ -306,6 +308,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		false,	/* needsRebuffer */
 		false,	/* multiple_of */
+		false,	/* stableSyncFlush */
 		_af_g711_format_ok,
 		_AFg711initcompress, _AFg711initdecompress
 	},
@@ -319,6 +322,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		true,	/* needsRebuffer */
 		false,	/* multiple_of */
+		false,	/* stableSyncFlush */
 		_af_ima_adpcm_format_ok,
 		_af_ima_adpcm_init_compress, _af_ima_adpcm_init_decompress
 	},
@@ -332,6 +336,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		true,	/* needsRebuffer */
 		false,	/* multiple_of */
+		false,	/* stableSyncFlush */
 		_af_ms_adpcm_format_ok,
 		_af_ms_adpcm_init_compress, _af_ms_adpcm_init_decompress
 	},
@@ -349,6 +354,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		false,	// needsRebuffer
 		false,	// multiple_of
+		false,	// stableSyncFlush
 		_af_flac_format_ok,
 		_af_flac_init_compress, _af_flac_init_decompress
 	},
@@ -362,6 +368,7 @@ const CompressionUnit _af_compression[_AF_NUM_COMPRESSION] =
 		AF_SAMPFMT_TWOSCOMP, 16,
 		true,	// needsRebuffer
 		false,	// multiple_of
+		true,	// stableSyncFlush
 		_af_alac_format_ok,
 		_af_alac_init_compress, _af_alac_init_decompress
 	}

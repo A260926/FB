@@ -49,11 +49,22 @@ public:
 	void append(size_t bytesPerPacket);
 	size_t bytesPerPacket(size_t packet) const { return m_bytesPerPacket[packet]; }
 	AFfileoffset startOfPacket(size_t packet) const;
+	/*
+		Remove packet entries at and beyond the given count. This is used
+		to discard a provisional trailing packet which was written during
+		a sync but is not yet part of the durable stream.
+	*/
+	void truncatePackets(size_t packetCount);
+
+	/* Sum of the sizes of all packets currently in the table. */
+	AFfileoffset totalBytes() const { return m_totalBytes; }
 
 private:
 	int64_t m_numValidFrames;
 	int32_t m_primingFrames;
 	int32_t m_remainderFrames;
+
+	AFfileoffset m_totalBytes;
 
 	std::vector<size_t> m_bytesPerPacket;
 };

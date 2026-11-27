@@ -72,6 +72,12 @@ struct CompressionUnit
 	int	nativeSampleWidth;	/* sample width in bits */
 	bool	needsRebuffer;	/* if there are chunk boundary requirements */
 	bool	multiple_of;	/* can accept any multiple of chunksize */
+	/*
+		If true, a sync which has no new PCM to flush must not push the
+		pending partial chunk again. This keeps repeated syncs of a
+		codec with a variable-length tail packet stable.
+	*/
+	bool	stableSyncFlush;
 	bool	(*fmtok) (AudioFormat *format);
 
 	FileModule *(*initcompress) (Track *track, File *fh,

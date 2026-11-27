@@ -53,6 +53,7 @@ public:
 	virtual off_t length() OVERRIDE;
 	virtual off_t seek(off_t offset, SeekOrigin origin) OVERRIDE;
 	virtual off_t tell() OVERRIDE;
+	virtual bool truncate(off_t length) OVERRIDE;
 
 private:
 	int m_fd;
@@ -104,6 +105,11 @@ File *File::create(AFvirtualfile *vf, File::AccessMode mode)
 
 File::~File()
 {
+}
+
+bool File::truncate(off_t)
+{
+	return false;
 }
 
 bool File::canSeek()
@@ -159,6 +165,13 @@ off_t FilePOSIX::seek(off_t offset, File::SeekOrigin origin)
 off_t FilePOSIX::tell()
 {
 	return seek(0, File::SeekFromCurrent);
+}
+
+bool FilePOSIX::truncate(off_t length)
+{
+	if (m_fd == -1)
+		return false;
+	return ftruncate(m_fd, length) == 0;
 }
 
 int FileVF::close()

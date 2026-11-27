@@ -256,6 +256,14 @@ status CAFFile::update()
 		return AF_FAIL;
 	if (writePacketTable() == AF_FAIL)
 		return AF_FAIL;
+	/*
+		The data and packet table may have been rewritten in place with
+		fewer bytes than a previous sync produced. Drop any stale tail
+		so it cannot be mistaken for a valid chunk or packet.
+	*/
+	off_t end = m_fh->tell();
+	if (end >= 0)
+		m_fh->truncate(end);
 	return AF_SUCCEED;
 }
 
@@ -461,31 +469,31 @@ status CAFFile::parsePacketTable(const Tag &tag, int64_t length)
 		return AF_FAIL;
 	}
 
-	if (!numPackets)
-		return AF_SUCCEED;
-
-	int64_t tableLength = length - 24;
-
-	SharedPtr<Buffer> buffer = new Buffer(tableLength);
-	if (m_fh->read(buffer->data(), tableLength) != tableLength)
-		return AF_FAIL;
-
 	SharedPtr<PacketTable> packetTable = new PacketTable(numValidFrames,
 		primingFrames, remainderFrames);
 
-	const uint8_t *data = static_cast<const uint8_t *>(buffer->data());
-	size_t position = 0;
-	while (position < buffer->size())
+	if (numPackets)
 	{
-		size_t sizeRemaining = buffer->size() - position;
-		uint32_t bytesPerPacket = readBERInteger(data + position, &sizeRemaining);
-		if (bytesPerPacket == 0)
-			break;
-		packetTable->append(bytesPerPacket);
-		position += sizeRemaining;
-	}
+		int64_t tableLength = length - 24;
 
-	assert(numPackets == packetTable->numPackets());
+		SharedPtr<Buffer> buffer = new Buffer(tableLength);
+		if (m_fh->read(buffer->data(), tableLength) != tableLength)
+			return AF_FAIL;
+
+		const uint8_t *data = static_cast<const uint8_t *>(buffer->data());
+		size_t position = 0;
+		while (position < buffer->size())
+		{
+			size_t sizeRemaining = buffer->size() - position;
+			uint32_t bytesPerPacket = readBERInteger(data + position, &sizeRemaining);
+			if (bytesPerPacket == 0)
+				break;
+			packetTable->append(bytesPerPacket);
+			position += sizeRemaining;
+		}
+
+		assert(numPackets == packetTable->numPackets());
+	}
 
 	Track *track = getTrack();
 	track->m_packetTable = packetTable;

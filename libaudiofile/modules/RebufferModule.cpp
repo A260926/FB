@@ -27,11 +27,13 @@
 #include <string.h>
 
 RebufferModule::RebufferModule(Direction direction, int bytesPerFrame,
-	int numFrames, bool multipleOf) :
+	int numFrames, bool multipleOf, bool skipRedundantSyncFlush) :
 	m_direction(direction),
 	m_bytesPerFrame(bytesPerFrame),
 	m_numFrames(numFrames),
 	m_multipleOf(multipleOf),
+	m_skipRedundantSyncFlush(skipRedundantSyncFlush),
+	m_pushedSinceSync(false),
 	m_eof(false),
 	m_sentShortChunk(false),
 	m_buffer(NULL),
@@ -173,6 +175,7 @@ void RebufferModule::reset1()
 	m_offset = m_numFrames;
 	m_eof = false;
 	m_sentShortChunk = false;
+	m_pushedSinceSync = false;
 	assert(m_offset > 0 && m_offset <= m_numFrames);
 }
 
@@ -188,6 +191,9 @@ void RebufferModule::runPush()
 	char *outBuffer = static_cast<char *>(m_outChunk->buffer);
 
 	assert(m_offset >= 0 && m_offset < m_numFrames);
+
+	if (framesToPush > 0)
+		m_pushedSinceSync = true;
 
 	// Check that we will be able to push even one block.
 	if (m_offset + framesToPush >= m_numFrames)
@@ -251,6 +257,17 @@ void RebufferModule::sync1()
 {
 	assert(m_offset >= 0 && m_offset < m_numFrames);
 
+	/*
+		If nothing has been pushed since the previous sync, the pending
+		partial chunk has already been emitted once. Pushing it again
+		would duplicate those frames, so skip it.
+	*/
+	if (m_skipRedundantSyncFlush && !m_pushedSinceSync && m_offset > 0)
+	{
+		m_savedOffset = -1;
+		return;
+	}
+
 	// Save all the frames and the offset so we can restore our state later.
 	memcpy(m_savedBuffer, m_buffer, m_numFrames * m_bytesPerFrame);
 	m_savedOffset = m_offset;
@@ -260,12 +277,16 @@ void RebufferModule::sync2()
 {
 	assert(m_offset >= 0 && m_offset < m_numFrames);
 
+	if (m_skipRedundantSyncFlush && m_savedOffset < 0)
+		return;
+
 	memcpy(m_outChunk->buffer, m_buffer, m_offset * m_bytesPerFrame);
 
 	push(m_offset);
 
 	memcpy(m_buffer, m_savedBuffer, m_numFrames * m_bytesPerFrame);
 	m_offset = m_savedOffset;
+	m_pushedSinceSync = false;
 
 	assert(m_offset >= 0 && m_offset < m_numFrames);
 }

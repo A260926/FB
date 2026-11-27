@@ -25,7 +25,8 @@ PacketTable::PacketTable(int64_t numValidFrames, int32_t primingFrames,
 	int32_t remainderFrames) :
 	m_numValidFrames(numValidFrames),
 	m_primingFrames(primingFrames),
-	m_remainderFrames(remainderFrames)
+	m_remainderFrames(remainderFrames),
+	m_totalBytes(0)
 {
 }
 
@@ -34,6 +35,7 @@ PacketTable::PacketTable()
 	m_numValidFrames = 0;
 	m_primingFrames = 0;
 	m_remainderFrames = 0;
+	m_totalBytes = 0;
 }
 
 PacketTable::~PacketTable()
@@ -58,6 +60,7 @@ void PacketTable::setRemainderFrames(int32_t remainderFrames)
 void PacketTable::append(size_t bytesPerPacket)
 {
 	m_bytesPerPacket.push_back(bytesPerPacket);
+	m_totalBytes += bytesPerPacket;
 }
 
 AFfileoffset PacketTable::startOfPacket(size_t packet) const
@@ -66,4 +69,13 @@ AFfileoffset PacketTable::startOfPacket(size_t packet) const
 	for (size_t i=0; i<packet; i++)
 		offset += m_bytesPerPacket[i];
 	return offset;
+}
+
+void PacketTable::truncatePackets(size_t packetCount)
+{
+	if (packetCount >= m_bytesPerPacket.size())
+		return;
+	for (size_t i = packetCount; i < m_bytesPerPacket.size(); i++)
+		m_totalBytes -= m_bytesPerPacket[i];
+	m_bytesPerPacket.resize(packetCount);
 }

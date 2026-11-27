@@ -34,7 +34,8 @@ public:
 		VariableToFixed
 	};
 
-	RebufferModule(Direction, int bytesPerFrame, int numFrames, bool multipleOf);
+	RebufferModule(Direction, int bytesPerFrame, int numFrames, bool multipleOf,
+		bool skipRedundantSyncFlush = false);
 	virtual ~RebufferModule();
 
 	virtual const char *name() const OVERRIDE { return "rebuffer"; }
@@ -54,6 +55,13 @@ private:
 	int m_bytesPerFrame;
 	int m_numFrames;
 	bool m_multipleOf; // buffer to multiple of m_numFrames
+	/*
+		When set, a sync which finds nothing new to flush leaves the
+		trailing partial chunk untouched instead of emitting it again.
+		This gives repeat syncs a stable result.
+	*/
+	bool m_skipRedundantSyncFlush;
+	bool m_pushedSinceSync;
 	bool m_eof; // end of input stream reached
 	bool m_sentShortChunk; // end of input stream indicated
 	char *m_buffer;

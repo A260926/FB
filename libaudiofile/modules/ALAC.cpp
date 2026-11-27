@@ -83,11 +83,26 @@ private:
 	ALACEncoder *m_encoder;
 	int m_currentPacket;
 
+	/*
+		The last packet written during a sync is a provisional tail: it
+		exists so a reader can hear frames which do not yet fill a whole
+		packet. The rebuffer still holds those same frames, so once more
+		PCM arrives they are re-encoded as part of a regular packet and
+		the provisional one must be dropped rather than counted twice.
+	*/
+	bool m_hasProvisionalPacket;
+	AFframecount m_provisionalFrames;
+	AFfileoffset m_provisionalStart;
+
+	/* True between sync1 and sync2, while the rebuffer may flush a tail. */
+	bool m_inSync;
+
 	ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData);
 	void initDecoder();
 	void initEncoder();
 
 	AudioFormatDescription outputFormat() const;
+	void discardProvisionalPacket();
 };
 
 ALAC::ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData) :
@@ -97,7 +112,11 @@ ALAC::ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData) :
 	m_codecData(codecData),
 	m_decoder(NULL),
 	m_encoder(NULL),
-	m_currentPacket(0)
+	m_currentPacket(0),
+	m_hasProvisionalPacket(false),
+	m_provisionalFrames(0),
+	m_provisionalStart(0),
+	m_inSync(false)
 {
 	if (mode == Decompress)
 		initDecoder();
@@ -276,6 +295,32 @@ int ALAC::bufferSize() const
 		((10 + m_track->f.sampleWidth) / 8) + 1;
 }
 
+void ALAC::discardProvisionalPacket()
+{
+	if (!m_hasProvisionalPacket)
+		return;
+
+	PacketTable *packetTable = m_track->m_packetTable.get();
+	packetTable->truncatePackets(packetTable->numPackets() - 1);
+	packetTable->setNumValidFrames(packetTable->numValidFrames() -
+		m_provisionalFrames);
+
+	/*
+		Rewind to the start of the discarded packet so the next packet
+		overwrites it instead of being appended after stale bytes.
+	*/
+	if (m_provisionalStart >= 0)
+	{
+		if (canSeek())
+			seek(m_provisionalStart);
+		m_track->fpos_next_frame = m_provisionalStart;
+	}
+
+	m_hasProvisionalPacket = false;
+	m_provisionalFrames = 0;
+	m_provisionalStart = 0;
+}
+
 void ALAC::runPush()
 {
 	AudioFormatDescription inputFormat;
@@ -288,6 +333,17 @@ void ALAC::runPush()
 	inputFormat.mChannelsPerFrame = m_track->f.channelCount;
 	inputFormat.mBitsPerChannel = m_track->f.sampleWidth;
 	inputFormat.mReserved = 0;
+
+	/*
+		Any PCM pushed after a sync invalidates the provisional trailing
+		packet written by that sync. Its frames are still buffered in the
+		rebuffer and are encoded again here.
+	*/
+	discardProvisionalPacket();
+
+	// A sync can flush an empty rebuffer; there is nothing to encode.
+	if (m_inChunk->frameCount == 0)
+		return;
 
 	int32_t numBytes = m_inChunk->frameCount * inputFormat.mBytesPerFrame;
 	int32_t result = m_encoder->Encode(inputFormat, outputFormat(),
@@ -316,19 +372,57 @@ void ALAC::runPush()
 
 	packetTable->setNumValidFrames(packetTable->numValidFrames() +
 		m_inChunk->frameCount);
+
+	/*
+		A packet produced while a sync is flushing the rebuffer, and
+		which does not fill a whole packet, is only a provisional tail.
+	*/
+	if (m_inSync && m_inChunk->frameCount % m_track->f.framesPerPacket != 0)
+	{
+		m_hasProvisionalPacket = true;
+		m_provisionalFrames = m_inChunk->frameCount;
+		m_provisionalStart = m_track->fpos_next_frame - numBytes;
+	}
 }
 
 void ALAC::sync1()
 {
+	/*
+		Position the file at the logical write position before the
+		rebuffer flushes. If the previous sync left a provisional tail,
+		fpos_next_frame points at the start of that packet, so flushing
+		overwrites it instead of appending a duplicate.
+	*/
+	if (canSeek())
+		seek(m_track->fpos_next_frame);
+
 	m_savedPositionNextFrame = m_track->fpos_next_frame;
 	m_savedNextFrame = m_track->nextfframe;
+	m_inSync = true;
 }
 
 void ALAC::sync2()
 {
 	assert(!canSeek() || (tell() == m_track->fpos_next_frame));
 
-	m_track->fpos_after_data = tell();
+	m_inSync = false;
+
+	/*
+		The packet table is the authority for how much compressed audio
+		exists. A provisional tail is counted here (so readers can hear
+		it), but the byte counters maintained by FileModule::write also
+		include bytes from tails which were later replaced. Recompute
+		the data extent from the packet table so the CAF data chunk and
+		the following pakt chunk describe exactly the live packets.
+	*/
+	if (mode() == Compress && m_track->m_packetTable)
+	{
+		m_track->data_size = m_track->m_packetTable->totalBytes();
+		m_track->fpos_after_data =
+			m_track->fpos_first_frame + m_track->data_size;
+	}
+	else
+		m_track->fpos_after_data = tell();
 
 	m_track->fpos_next_frame = m_savedPositionNextFrame;
 	m_track->nextfframe = m_savedNextFrame;

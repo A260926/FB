@@ -85,7 +85,9 @@ status ModuleState::initFileModule(AFfilehandle file, Track *track)
 
 		m_fileRebufferModule = new RebufferModule(direction,
 			track->f.bytesPerFrame(false), chunkFrames,
-			unit->multiple_of);
+			unit->multiple_of,
+			direction == RebufferModule::VariableToFixed &&
+				unit->stableSyncFlush);
 	}
 
 	track->filemodhappy = true;
