@@ -11,10 +11,11 @@
 
 #ifndef __GEOMETRY_HGRID_H
 #define __GEOMETRY_HGRID_H
-// Author: J. Andreas Bærentzen,
+// Author: J. Andreas Bï¿½rentzen,
 // Created: Wed Jan 24 18:29:0
 
 #include <vector>
+#include <GEL/CGLA/ArithVec.h>
 #include <GEL/Geometry/AncestorGrid.h>
 #include <GEL/Geometry/Cell.h>
 
@@ -83,6 +84,68 @@ namespace Geometry
 		{
 			assert(this->in_domain(p));
 			top_grid[get_top_index(p)].store(p, vox);
+		}
+
+		/** Fill the half open voxel box [lo,hi) with a single value.
+
+				The box is clipped against the grid domain; if the intersection
+				is empty the grid is left unchanged. Bricks whose entire logical
+				(voxel domain) extent is covered are coalesced directly into a
+				single value without being expanded first. For partially covered
+				bricks only the affected voxels are written, and afterwards the
+				brick is coalesced again if all of its valid voxels (padding of
+				the final bricks excluded) ended up with the same value. */
+		void fill_box(const CGLA::Vec3i& lo, const CGLA::Vec3i& hi, const T& value)
+		{
+			const CGLA::Vec3i& dims = this->get_dims();
+			const CGLA::Vec3i box_lo = CGLA::v_max(lo, CGLA::Vec3i(0));
+			const CGLA::Vec3i box_hi = CGLA::v_min(hi, dims);
+			if(box_hi[0] <= box_lo[0] || box_hi[1] <= box_lo[1] || box_hi[2] <= box_lo[2])
+				return;
+			const int bdim = get_bottom_dim();
+			const CGLA::Vec3i bt_lo = box_lo/bdim;
+			const CGLA::Vec3i bt_hi = (box_hi-CGLA::Vec3i(1))/bdim;
+			for(CGLA::Vec3i bt(bt_lo); bt[2]<=bt_hi[2]; ++bt[2])
+				for(bt[1]=bt_lo[1]; bt[1]<=bt_hi[1]; ++bt[1])
+					for(bt[0]=bt_lo[0]; bt[0]<=bt_hi[0]; ++bt[0])
+					{
+						const CGLA::Vec3i org = bt*bdim;
+						const CGLA::Vec3i valid_hi = CGLA::v_min(org+CGLA::Vec3i(bdim), dims);
+						const CGLA::Vec3i lo_c = CGLA::v_max(box_lo, org);
+						const CGLA::Vec3i hi_c = CGLA::v_min(box_hi, valid_hi);
+						CellT& cell = get_cell(bt);
+						if(lo_c==org && hi_c==valid_hi)
+						{
+							// The whole logical brick is covered: coalesce
+							// directly instead of expanding and writing.
+							cell.coalesce(value);
+							continue;
+						}
+						if(cell.is_coalesced())
+						{
+							if(cell[org]==value)
+								continue; // Already uniformly the fill value.
+							cell.split();
+						}
+						for(CGLA::Vec3i p(lo_c); p[2]<hi_c[2]; ++p[2])
+							for(p[1]=lo_c[1]; p[1]<hi_c[1]; ++p[1])
+								for(p[0]=lo_c[0]; p[0]<hi_c[0]; ++p[0])
+									cell.store(p, value);
+						// Coalesce again if every valid voxel now holds
+						// the same value.
+						const T v0 = cell[org];
+						bool uniform = true;
+						for(CGLA::Vec3i p(org); uniform && p[2]<valid_hi[2]; ++p[2])
+							for(p[1]=org[1]; uniform && p[1]<valid_hi[1]; ++p[1])
+								for(p[0]=org[0]; p[0]<valid_hi[0]; ++p[0])
+									if(!(cell[p]==v0))
+									{
+										uniform = false;
+										break;
+									}
+						if(uniform)
+							cell.coalesce(v0);
+					}
 		}
 
 

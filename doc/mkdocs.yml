@@ -83,6 +83,7 @@ nav:
     - HMesh Module: api/hmesh.md
     - Graph Module: api/graph.md
     - Spatial Module: api/spatial.md
+    - C++ HGrid & Sparse Polygonize: api/cpp_hgrid.md
     - GL Display: api/gl_display.md
     - Jupyter Display: api/jupyter_display.md
   - Tutorials:

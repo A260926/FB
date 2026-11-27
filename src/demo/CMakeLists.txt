@@ -14,6 +14,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(GEL REQUIRED HINTS "$ENV{HOME}/.local")
 
 add_subdirectory(HRsR)
+add_subdirectory(HGridSculpt)
 add_subdirectory(MeshDistance)
 add_subdirectory(MeshEditGlut)
 add_subdirectory(OBJViewer)
