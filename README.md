@@ -33,6 +33,76 @@ Currently there is an OpenGL back-end for NanoVG: [nanovg_gl.h](/src/nanovg_gl.h
 
 *NOTE:* The render target you're rendering to must have stencil buffer.
 
+## CPU off-screen back-end
+
+For builds without a window or GPU (continuous integration, preview or
+thumbnail generation) [nanovg_cpu.h](/src/nanovg_cpu.h) rasterizes the exact
+geometry NanoVG already tessellates on the CPU into a caller owned buffer. It
+links only the in-tree C sources — no windowing or GPU library is needed.
+
+```C
+#include "nanovg_cpu.h"
+...
+unsigned char* rgba = malloc(width * height * 4); // premultiplied RGBA8
+NVGcontext* vg = nvgCreateCPU(rgba, width, height, width * 4);
+
+nvgBeginFrame(vg, width, height, 1.0f);   // logical size * DPR == buffer size
+nvgBeginPath(vg);
+nvgRect(vg, 10, 10, 40, 30);
+nvgFillColor(vg, nvgRGBA(255, 192, 0, 255));
+nvgFill(vg);
+nvgEndFrame(vg);                          // results are published here
+...
+nvgDeleteCPU(vg);
+free(rgba);
+```
+
+The buffer is borrowed, never allocated or freed by the back-end. Its origin
+is the top-left corner, the format is premultiplied RGBA8 (R, G, B, A, one
+byte each), and the stride must be at least `4 * width`. Invalid arguments to
+`nvgCreateCPU()` return `NULL`; the caller guarantees the buffer length.
+
+Edge rules used by the CPU rasterizer:
+
+- edge anti-aliasing is disabled (`edgeAntiAlias = 0`); coverage is evaluated
+  at the centers of a regular 4x4 sub-pixel grid, i.e. 16 samples per pixel;
+- fills combine all sub-paths with the non-zero winding number rule, so
+  concave shapes, holes, multiple contours and self-intersections are handled;
+  the tessellated triangle fans are never treated as independent solid faces;
+- strokes merge the triangle strips of one `nvgStroke()` call into a coverage
+  union (overlapping joins and self-intersections paint a sub-pixel at most
+  once), while separate stroke calls still blend in submission order;
+- glyph and triangle lists use a half-open shared-edge rule so adjacent
+  triangles never cover a shared edge twice; UVs are barycentric-interpolated
+  from the vertices;
+- coordinates, paints and scissors are interpreted in the logical coordinates
+  given to the back-end callbacks; the device pixel ratio is not applied a
+  second time. When rendering at DPR != 1, scale the geometry yourself (for
+  example `nvgScale(vg, dpr, dpr)`) so that `logicalWidth * dpr` equals the
+  physical buffer width;
+- scissors are hard inside/outside tests on the inverse-transformed rectangle,
+  with no GL-style fringe smoothing.
+
+The frame is cancelable: the borrowed buffer keeps its previous bytes until
+`nvgEndFrame()` publishes the accumulated drawing in call order;
+`nvgCancelFrame()` discards the frame and the next frame starts from the
+buffer's latest contents. Textures are copied on creation (`NULL` data means
+all zeros), updates replace only the given rectangle, and textures updated or
+deleted after a draw was recorded cannot affect that draw.
+
+Image filtering supports nearest and texel-center bilinear sampling with
+`NVG_IMAGE_REPEATX`, `NVG_IMAGE_REPEATY` and `NVG_IMAGE_FLIPY`; texture sizes
+do not need to be powers of two. Mipmaps are not generated, so
+`NVG_IMAGE_GENERATE_MIPMAPS` is accepted but ignored.
+
+A complete C program that renders a scene and writes a binary PPM image is in
+[example/example_cpu.c](/example/example_cpu.c):
+
+```
+cc -std=c99 -O1 -Isrc src/nanovg.c src/nanovg_cpu.c example/example_cpu.c -lm -o example_cpu
+./example_cpu preview.ppm
+```
+
 ## Drawing shapes with NanoVG
 
 Drawing a simple shape using NanoVG consists of four steps: 1) begin a new shape, 2) define the path to draw, 3) set fill or stroke, 4) and finally fill or stroke the path.
