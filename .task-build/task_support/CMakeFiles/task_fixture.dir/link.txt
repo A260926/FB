@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -arch arm64 -mmacosx-version-min=10.15 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/task_fixture.dir/io_fixture.cpp.o -o ../task_fixture  ../src/opentimelineio/libopentimelineio.a ../src/opentime/libopentime.a ../src/deps/Imath/src/Imath/libImath-3_2.a -lm ../src/deps/minizip-ng/libminizip.a
