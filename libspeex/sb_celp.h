@@ -82,6 +82,12 @@ typedef struct SBEncState {
    float  abr_count;
    int    vad_enabled;            /**< 1 for enabling VAD, 0 otherwise */
    float  relative_quality;
+#ifndef DISABLE_FLOAT_API
+   spx_int32_t vbr_frame_bits;    /**< Per-frame bit budget (0 = legacy behaviour) */
+   spx_int32_t frame_bits_limit;  /**< Budget handed down by the parent layer (-1 = none) */
+   spx_int32_t frame_bits_used;   /**< Audio bits the last encode actually appended */
+   int    test_high_demand;       /**< Internal: demanded high-band submode override (-1 = analysis) */
+#endif
 #endif /* #ifndef DISABLE_VBR */
 
    int    encode_submode;

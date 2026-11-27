@@ -58,6 +58,91 @@
 
 #define SUBMODE(x) st->submodes[st->submodeID]->x
 
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+/* Audio bits a narrowband (sub)frame occupies once encoded, its 5-bit mode
+   header included, taken from the real mode table.  Returns 0 for a null
+   mode (which carries only the header). */
+static int nb_mode_frame_bits(const SpeexNBMode *mode, int submode)
+{
+   if (submode < 0 || submode >= NB_SUBMODES)
+      return 0;
+   if (mode->submodes[submode] == NULL)
+      return 0;
+   return mode->submodes[submode]->bits_per_frame;
+}
+
+/* Resolve the effective per-frame budget for this encode call.  Returns -1
+   when no budget is active (legacy behaviour).  The user budget from
+   SPEEX_SET_VBR_FRAME_BITS is folded together with VBR_MAX_BITRATE at this
+   layer's clock; a budget handed down by a parent layer is an absolute
+   allowance for this sub-tree only. */
+static spx_int32_t nb_effective_budget(EncState *st)
+{
+   spx_int32_t budget = -1;
+   /* An allowance handed down by a parent is authoritative: the parent has
+      already folded any legacy cap into whole-frame bits for the sub-tree, so
+      this layer must not also apply its own split cap. */
+   if (st->frame_bits_limit >= 0)
+      return st->frame_bits_limit;
+   if (st->vbr_frame_bits > 0)
+   {
+      budget = st->vbr_frame_bits;
+      if (st->vbr_max > 0)
+      {
+         spx_int32_t converted = (spx_int32_t)floor(st->vbr_max*(double)NB_FRAME_SIZE/st->sampling_rate);
+         if (converted < budget)
+            budget = converted;
+      }
+   }
+   return budget;
+}
+
+/* The part of the budget that is a user contract for this layer alone (the
+   narrowband audio bits), ignoring any allowance handed down by a parent and
+   any compression-only VBR_MAX_BITRATE.  Returns -1 when no user budget is
+   set; used to distinguish a hard failure from a legacy cap that happens to be
+   too small for even the smallest frame. */
+static spx_int32_t nb_own_budget(EncState *st)
+{
+   return (st->vbr_frame_bits > 0) ? st->vbr_frame_bits : -1;
+}
+
+/* Smallest non-null frame size, used to reject an impossible budget. */
+static int nb_min_frame_bits(const SpeexNBMode *mode)
+{
+   int best = 0, m;
+   for (m=1;m<NB_SUBMODES;m++)
+   {
+      int bits = nb_mode_frame_bits(mode, m);
+      if (bits > 0 && (best == 0 || bits < best))
+         best = bits;
+   }
+   return best;
+}
+
+/* Pick the legal non-null submode with the most bits that does not exceed
+   either 'room' or 'max_bits'.  Ties go to the smaller submode number.
+   Returns -1 if none fits. */
+static int nb_fit_mode(const SpeexNBMode *mode, int room, int max_bits)
+{
+   int best = -1, best_bits = 0, m;
+   for (m=1;m<NB_SUBMODES;m++)
+   {
+      int bits = nb_mode_frame_bits(mode, m);
+      if (bits <= 0 || bits > room || bits > max_bits)
+         continue;
+      if (bits > best_bits || (bits == best_bits && (best < 0 || m < best)))
+      {
+         best = m;
+         best_bits = bits;
+      }
+   }
+   return best;
+}
+#endif /* #ifndef DISABLE_FLOAT_API */
+#endif /* #ifndef DISABLE_VBR */
+
 /* Default size for the encoder and decoder stack (can be changed at compile time).
    This does not apply when using variable-size arrays or alloca. */
 #ifndef NB_ENC_STACK
@@ -150,6 +235,12 @@ void *nb_encoder_init(const SpeexMode *m)
    st->vbr_quality = 8;
    st->vbr_enabled = 0;
    st->vbr_max = 0;
+#ifndef DISABLE_FLOAT_API
+   st->vbr_frame_bits = 0;
+   st->frame_bits_limit = -1;
+   st->frame_bits_used = 0;
+   st->test_demand = -1;
+#endif
    st->vad_enabled = 0;
    st->dtx_enabled = 0;
    st->dtx_count=0;
@@ -213,6 +304,13 @@ int nb_encoder_ctl(void *state, int request, void *ptr)
       break;
 #ifndef DISABLE_VBR
       case SPEEX_SET_VBR:
+#ifndef DISABLE_FLOAT_API
+      /* With a per-frame budget active the last analysis mode must survive.
+         ABR keeps the VBR analysis flag set, so switching that flag off (or
+         switching ABR off, which clears it) would strand the budget. */
+      if (!(*(spx_int32_t*)ptr) && st->vbr_frame_bits>0)
+         break;
+#endif
       st->vbr_enabled = (*(spx_int32_t*)ptr);
       break;
    case SPEEX_GET_VBR:
@@ -231,6 +329,11 @@ int nb_encoder_ctl(void *state, int request, void *ptr)
       (*(spx_int32_t*)ptr) = st->dtx_enabled;
       break;
    case SPEEX_SET_ABR:
+#ifndef DISABLE_FLOAT_API
+      /* Clearing ABR also clears the VBR analysis flag in the legacy path. */
+      if (!(*(spx_int32_t*)ptr) && st->vbr_frame_bits>0)
+         break;
+#endif
       st->abr_enabled = (*(spx_int32_t*)ptr);
       st->vbr_enabled = st->abr_enabled!=0;
       if (st->vbr_enabled)
@@ -334,6 +437,12 @@ int nb_encoder_ctl(void *state, int request, void *ptr)
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+      if (!(*(spx_int32_t*)ptr) && st->vbr_frame_bits>0)
+         break;
+#endif
+#endif
       st->encode_submode = (*(spx_int32_t*)ptr);
       break;
    case SPEEX_GET_SUBMODE_ENCODING:
@@ -357,6 +466,49 @@ int nb_encoder_ctl(void *state, int request, void *ptr)
    case SPEEX_GET_VBR_MAX_BITRATE:
       (*(spx_int32_t*)ptr) = st->vbr_max;
       break;
+#endif /* #ifndef DISABLE_VBR */
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+   case SPEEX_SET_VBR_FRAME_BITS:
+      {
+         spx_int32_t value = (*(spx_int32_t*)ptr);
+         if (value == 0) {
+            st->vbr_frame_bits = 0;
+         } else {
+            /* A positive budget requires an active VBR/ABR mode and the
+               per-frame submode header, and must fit the mode's range. */
+            if (value < 43 || value > 4096)
+               return -1;
+            if (!(st->vbr_enabled || st->abr_enabled) || !st->encode_submode)
+               return -1;
+            st->vbr_frame_bits = value;
+         }
+      }
+      break;
+   case SPEEX_GET_VBR_FRAME_BITS:
+      (*(spx_int32_t*)ptr) = st->vbr_frame_bits;
+      break;
+   case SPEEX_SET_FRAME_BITS_LIMIT:
+      st->frame_bits_limit = (*(spx_int32_t*)ptr);
+      break;
+   case SPEEX_GET_FRAME_BITS_USED:
+      (*(spx_int32_t*)ptr) = st->frame_bits_used;
+      break;
+   case SPEEX_GET_MIN_FRAME_BITS:
+      (*(spx_int32_t*)ptr) = nb_min_frame_bits((const SpeexNBMode*)(st->mode->mode));
+      break;
+   case SPEEX_GET_ABR_DRIFT:
+      {
+         float *v = (float*)ptr;
+         v[0] = st->abr_drift;
+         v[1] = st->abr_drift2;
+         v[2] = st->abr_count;
+      }
+      break;
+   case SPEEX_SET_TEST_LOW_DEMAND:
+      st->test_demand = (*(spx_int32_t*)ptr);
+      break;
+#endif /* #ifndef DISABLE_FLOAT_API */
 #endif /* #ifndef DISABLE_VBR */
    case SPEEX_SET_HIGHPASS:
       st->highpass_enabled = (*(spx_int32_t*)ptr);
@@ -429,9 +581,41 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
    spx_word32_t ener=0;
    spx_word16_t fine_gain;
    spx_word16_t *in = (spx_word16_t*)vin;
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+   spx_int32_t budget;
+   int bits_before = bits->nbBits;
+#endif
+#endif
 
    st=(EncState *)state;
    stack=st->stack;
+
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+   /* Resolve the budget up front and reject an impossible one before touching
+      the input, the encoder state or the bit-stream. */
+   budget = nb_effective_budget(st);
+   if (budget > 0)
+   {
+      int mn = nb_min_frame_bits((const SpeexNBMode*)(st->mode->mode));
+      if (budget < mn)
+      {
+         /* A compression-only budget (legacy VBR_MAX_BITRATE) is a cap: it is
+            simply ignored when it cannot hold even the smallest frame.  A user
+            budget is a hard contract and fails instead. */
+         if (nb_own_budget(st) > 0 && budget < mn)
+            return -1;
+         budget = -1;
+      }
+   }
+#endif
+#endif
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+   st->frame_bits_used = 0;
+#endif
+#endif
 
    ALLOC(lpc, NB_ORDER, spx_coef_t);
    ALLOC(bw_lpc1, NB_ORDER, spx_coef_t);
@@ -641,9 +825,30 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
          } else {
             st->dtx_count=0;
          }
+#ifndef DISABLE_FLOAT_API
+         if (st->test_demand>=0)
+            mode = st->test_demand;
+#endif
+#ifndef DISABLE_FLOAT_API
+         if (budget > 0 && mode > 0)
+         {
+            /* Fit the desired mode inside the remaining allowance.  A mode of
+               0 chosen by the DTX logic above is left alone; an undersized
+               budget must never manufacture silence. */
+            int fit = nb_fit_mode((const SpeexNBMode*)(st->mode->mode),
+                                  budget, nb_mode_frame_bits((const SpeexNBMode*)(st->mode->mode), mode));
+            if (fit < 0)
+               fit = 1;   /* keep the smallest frame; the pre-check guarantees it fits */
+            mode = fit;
+         }
+#endif
 
          speex_encoder_ctl(state, SPEEX_SET_MODE, &mode);
-         if (st->vbr_max>0)
+         if (st->vbr_max>0
+#ifndef DISABLE_FLOAT_API
+             && !(budget > 0)
+#endif
+            )
          {
             spx_int32_t rate;
             speex_encoder_ctl(state, SPEEX_GET_BITRATE, &rate);
@@ -653,7 +858,32 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
                speex_encoder_ctl(state, SPEEX_SET_BITRATE, &rate);
             }
          }
+#ifndef DISABLE_FLOAT_API
+         if (budget > 0 && st->vbr_max>0)
+         {
+            /* The budget already enforced the cap; drop the time-varying
+               selection the legacy SET_BITRATE above would have left behind. */
+            spx_int32_t sel = st->submodeSelect;
+            speex_encoder_ctl(state, SPEEX_SET_MODE, &sel);
+         }
+#endif
 
+#ifndef DISABLE_FLOAT_API
+         if (budget > 0)
+         {
+            /* The drift sees only the mode actually committed for this frame,
+               in bits converted at this layer's clock (no mode header). */
+            if (st->abr_enabled)
+            {
+               spx_int32_t bitrate;
+               int used_bits = nb_mode_frame_bits((const SpeexNBMode*)(st->mode->mode), st->submodeID);
+               bitrate = (spx_int32_t)floor(st->sampling_rate*(double)used_bits/NB_FRAME_SIZE);
+               st->abr_drift+=(bitrate-st->abr_enabled);
+               st->abr_drift2 = .95*st->abr_drift2 + .05*(bitrate-st->abr_enabled);
+               st->abr_count += 1.0;
+            }
+         } else
+#endif
          if (st->abr_enabled)
          {
             spx_int32_t bitrate;
@@ -680,6 +910,20 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
             st->dtx_count = 0;
             mode=st->submodeSelect;
          }
+#ifndef DISABLE_FLOAT_API
+         if (st->test_demand>=0)
+            mode = st->test_demand;
+#endif
+#ifndef DISABLE_FLOAT_API
+         if (budget > 0 && mode > 0)
+         {
+            int fit = nb_fit_mode((const SpeexNBMode*)(st->mode->mode),
+                                  budget, nb_mode_frame_bits((const SpeexNBMode*)(st->mode->mode), mode));
+            if (fit < 0)
+               fit = 1;
+            mode = fit;
+         }
+#endif
          /*speex_encoder_ctl(state, SPEEX_SET_MODE, &mode);*/
          st->submodeID=mode;
       }
@@ -714,6 +958,11 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
       /* Clear memory (no need to really compute it) */
       for (i=0;i<NB_ORDER;i++)
          st->mem_sp[i] = 0;
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+      st->frame_bits_used = bits->nbBits - bits_before;
+#endif
+#endif
       return 0;
 
    }
@@ -1052,6 +1301,11 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
    else
       st->bounded_pitch = 0;
 
+#ifndef DISABLE_VBR
+#ifndef DISABLE_FLOAT_API
+   st->frame_bits_used = bits->nbBits - bits_before;
+#endif
+#endif
    return 1;
 }
 #endif /* DISABLE_ENCODER */

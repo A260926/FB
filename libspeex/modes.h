@@ -62,6 +62,23 @@
 /** Used internally*/
 #define SPEEX_GET_STACK   106
 
+#ifndef DISABLE_FLOAT_API
+/** Internal: hand a per-frame bit budget down to a sub-encoder.
+ *  The value is an absolute allowance for the sub-encoder's audio bits
+ *  (including the sub-encoder's own mode header), -1 to clear it. */
+#define SPEEX_SET_FRAME_BITS_LIMIT 107
+/** Internal: retrieve the audio bits the last encode appended. */
+#define SPEEX_GET_FRAME_BITS_USED 108
+/** Internal: retrieve the smallest whole-frame size the layer can produce. */
+#define SPEEX_GET_MIN_FRAME_BITS 109
+/** Internal: retrieve the ABR drift state (3 floats: drift, drift2, count). */
+#define SPEEX_GET_ABR_DRIFT 110
+/** Internal test hook: override the narrowband demanded submode (recursive). */
+#define SPEEX_SET_TEST_LOW_DEMAND 111
+/** Internal test hook: override the high-band demanded submode. */
+#define SPEEX_SET_TEST_HIGH_DEMAND 112
+#endif
+
 
 /** Quantizes LSPs */
 typedef void (*lsp_quant_func)(spx_lsp_t *, spx_lsp_t *, int, SpeexBits *);

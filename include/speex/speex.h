@@ -151,6 +151,20 @@ extern "C" {
 /** Gets the max bit-rate allowed in VBR mode */
 #define SPEEX_GET_VBR_MAX_BITRATE 43
 
+/** Sets a hard per-frame bit budget for VBR/ABR encoding (0 disables).
+ *
+ *  The value is the number of audio bits that one encoder call may append to
+ *  the SpeexBits structure: the narrowband frame and every higher layer's mode
+ *  header are included.  Bits already present before the call, byte-alignment
+ *  padding, the terminator and in-band control messages are not counted.
+ *  A positive value requires VBR or ABR to be enabled and submode encoding to
+ *  be on, and must be within the mode's supported range.  The value may be
+ *  changed between frames.  Setting it to 0 restores the legacy bit-rate
+ *  handling.  Not supported by the fixed-point build. */
+#define SPEEX_SET_VBR_FRAME_BITS 48
+/** Gets the per-frame VBR/ABR bit budget (0 when disabled) */
+#define SPEEX_GET_VBR_FRAME_BITS 49
+
 /** Turn on/off input/output high-pass filtering */
 #define SPEEX_SET_HIGHPASS 44
 /** Get status of input/output high-pass filtering */

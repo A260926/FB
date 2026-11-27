@@ -101,6 +101,12 @@ typedef struct EncState {
    float  relative_quality;      /**< Relative quality that will be needed by VBR */
    spx_int32_t vbr_enabled;      /**< 1 for enabling VBR, 0 otherwise */
    spx_int32_t vbr_max;          /**< Max bit-rate allowed in VBR mode */
+#ifndef DISABLE_FLOAT_API
+   spx_int32_t vbr_frame_bits;   /**< Per-frame bit budget (0 = legacy behaviour) */
+   spx_int32_t frame_bits_limit; /**< Budget handed down by the parent layer (-1 = none) */
+   spx_int32_t frame_bits_used;  /**< Audio bits the last encode actually appended */
+   int    test_demand;           /**< Internal: demanded submode override (-1 = analysis) */
+#endif
    int    vad_enabled;           /**< 1 for enabling VAD, 0 otherwise */
    int    dtx_enabled;           /**< 1 for enabling DTX, 0 otherwise */
    int    dtx_count;             /**< Number of consecutive DTX frames */
