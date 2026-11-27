@@ -109,7 +109,22 @@ extern "C" {
 /** Get sampling rate used in bit-rate computation */
 #define SPEEX_GET_SAMPLING_RATE 25
 
-/** Reset the encoder/decoder memories to zero*/
+/** Reset the encoder/decoder memories to their initial values.
+ *  The argument is ignored and may be NULL.
+ *
+ *  Cleared: all audio-session history, i.e. the analysis window, the
+ *  predictor/synthesis/high-pass filter memories, excitation and look-ahead
+ *  buffers, VBR analysis state and DTX counters, packet-loss concealment
+ *  progress and its random seed, and (for wideband/ultra-wideband) every
+ *  QMF level together with the recursively embedded low-band state. Any
+ *  sub-mode selected transiently by VBR/VAD is discarded as well.
+ *
+ *  Kept: the caller-configured controls, namely quality or explicit mode,
+ *  complexity, sampling rate, high-pass switch, VBR/VAD/DTX switches and VBR
+ *  quality, PLC tuning and submode encoding. On the decoder the enhancement
+ *  switch and the in-band/user callback functions and their data pointers
+ *  are also retained. After a reset the handle produces the same output as a
+ *  newly created handle configured with the same controls. */
 #define SPEEX_RESET_STATE 26
 
 /** Get VBR info (mostly used internally) */

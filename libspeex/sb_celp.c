@@ -411,13 +411,37 @@ int sb_encoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Reset the embedded narrowband (or, for UWB, wideband) encoder
+            first: its analysis windows, predictor memories, VBR and DTX
+            state are all part of this session's history. */
+         speex_encoder_ctl(st->st_low, SPEEX_RESET_STATE, NULL);
          st->first = 1;
+         /* A VAD-only decision may have parked the high-band submodeID on a
+            transient sub-mode; the user's choice survives in submodeSelect. */
+         st->submodeID = st->submodeSelect;
          for (i=0;i<st->lpcSize;i++)
             st->old_lsp[i]= DIV32(MULT16_16(QCONST16(3.1415927f, LSP_SHIFT), i+1), st->lpcSize+1);
          for (i=0;i<st->lpcSize;i++)
+         {
+            st->old_qlsp[i]=0;
+            st->interp_qlpc[i]=0;
             st->mem_sw[i]=st->mem_sp[i]=st->mem_sp2[i]=0;
+         }
+         for (i=0;i<st->nbSubframes;i++)
+         {
+            st->pi_gain[i]=0;
+            st->exc_rms[i]=0;
+         }
+         /* High-band look-ahead buffer and the QMF analysis memory */
+         SPEEX_MEMSET(st->high, 0, st->windowSize-st->frame_size);
          for (i=0;i<QMF_ORDER;i++)
             st->h0_mem[i]=0;
+#ifndef DISABLE_VBR
+         st->relative_quality=0;
+         st->abr_drift=0;
+         st->abr_drift2=0;
+         st->abr_count=0;
+#endif /* #ifndef DISABLE_VBR */
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
@@ -690,7 +714,10 @@ int sb_encode(void *state, void *vin, SpeexBits *bits)
                break;
             modeid--;
          }
-         speex_encoder_ctl(state, SPEEX_SET_HIGH_MODE, &modeid);
+         /* The high-band VBR choice is transient: move only submodeID and
+            keep submodeSelect as the caller's high-band mode, mirroring the
+            VAD-only path below and enabling a clean SPEEX_RESET_STATE. */
+         st->submodeID = modeid;
          if (st->abr_enabled)
          {
             spx_int32_t bitrate;
@@ -1112,11 +1139,31 @@ int sb_decoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Reset the embedded narrowband (or, for UWB, wideband) decoder
+            together with this level: its PLC progress, synthesis memories
+            and random seed are part of the session history as well. */
+         speex_decoder_ctl(st->st_low, SPEEX_RESET_STATE, NULL);
+         st->first=1;
+         for (i=0;i<st->lpcSize;i++)
+         {
+            st->old_qlsp[i]=0;
+            st->interp_qlpc[i]=0;
+         }
          for (i=0;i<2*st->lpcSize;i++)
             st->mem_sp[i]=0;
+         for (i=0;i<st->nbSubframes;i++)
+         {
+            st->pi_gain[i]=0;
+            st->exc_rms[i]=0;
+         }
+         SPEEX_MEMSET(st->excBuf, 0, st->subframeSize);
          for (i=0;i<QMF_ORDER;i++)
             st->g0_mem[i]=st->g1_mem[i]=0;
          st->last_ener=0;
+         /* Restart the high-band PLC pseudo-random sequence at init */
+         st->seed = 1000;
+         /* The stream sets submodeID per frame; restore the init default. */
+         st->submodeID = ((const SpeexSBMode*)(st->mode->mode))->defaultSubmode;
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:

@@ -321,16 +321,43 @@ int nb_encoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Restore every session-history field to its nb_encoder_init()
+            value while leaving the caller-controlled settings (quality/mode,
+            complexity, sampling rate, high-pass, VBR/VAD/DTX, PLC tuning and
+            submode encoding) untouched. */
          st->bounded_pitch = 1;
          st->first = 1;
+         /* VAD/VBR may have moved submodeID to a transient, auto-selected
+            sub-mode; that is session history, not configuration. Restore the
+            caller's persistent selection held in submodeSelect. */
+         st->submodeID = st->submodeSelect;
+         st->cumul_gain = 1024;
+         st->ol_pitch = 0;
+         st->ol_voiced = 0;
+         for (i=0;i<NB_NB_SUBFRAMES;i++)
+            st->pitch[i]=0;
          for (i=0;i<NB_ORDER;i++)
             st->old_lsp[i]= DIV32(MULT16_16(QCONST16(3.1415927f, LSP_SHIFT), i+1), NB_ORDER+1);
          for (i=0;i<NB_ORDER;i++)
-            st->mem_sw[i]=st->mem_sw_whole[i]=st->mem_sp[i]=st->mem_exc[i]=0;
-         for (i=0;i<NB_FRAME_SIZE+NB_PITCH_END+1;i++)
+            st->old_qlsp[i]=0;
+         for (i=0;i<NB_ORDER;i++)
+            st->mem_sw[i]=st->mem_sw_whole[i]=st->mem_sp[i]=st->mem_exc[i]=st->mem_exc2[i]=0;
+         st->mem_hp[0]=st->mem_hp[1]=0;
+         for (i=0;i<NB_NB_SUBFRAMES;i++)
+            st->pi_gain[i]=0;
+         for (i=0;i<NB_EXCBUF;i++)
             st->excBuf[i]=st->swBuf[i]=0;
          for (i=0;i<NB_WINDOW_SIZE-NB_FRAME_SIZE;i++)
             st->winBuf[i]=0;
+#ifndef DISABLE_VBR
+         /* VBR analysis memory and DTX bookkeeping are session history */
+         vbr_init(&st->vbr);
+         st->relative_quality = 0;
+         st->dtx_count=0;
+         st->abr_drift = 0;
+         st->abr_drift2 = 0;
+         st->abr_count = 0;
+#endif /* #ifndef DISABLE_VBR */
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
@@ -642,7 +669,10 @@ int nb_encode(void *state, void *vin, SpeexBits *bits)
             st->dtx_count=0;
          }
 
-         speex_encoder_ctl(state, SPEEX_SET_MODE, &mode);
+         /* VBR picks a transient sub-mode per frame. Only submodeID tracks
+            it; submodeSelect keeps the caller's mode so SPEEX_RESET_STATE can
+            restore it. SPEEX_SET_MODE would overwrite the user selection. */
+         st->submodeID = mode;
          if (st->vbr_max>0)
          {
             spx_int32_t rate;
@@ -1181,10 +1211,37 @@ int nb_decoder_ctl(void *state, int request, void *ptr)
    case SPEEX_RESET_STATE:
       {
          int i;
+         /* Restore every session-history field to its nb_decoder_init()
+            value. The enhancement switch, sampling rate, high-pass setting,
+            submode encoding, in-band handlers and user handler are kept. */
+         st->first=1;
+         st->count_lost=0;
+         st->last_ol_gain = 0;
+         /* The whole excitation buffer, not just the first frame, must go
+            back to zero so PLC starts from a clean slate. */
+         SPEEX_MEMSET(st->excBuf, 0, NB_DEC_BUFFER);
          for (i=0;i<NB_ORDER;i++)
+         {
+            st->old_qlsp[i] = 0;
+            st->interp_qlpc[i] = 0;
             st->mem_sp[i]=0;
-         for (i=0;i<NB_FRAME_SIZE + NB_PITCH_END + 1;i++)
-            st->excBuf[i]=0;
+         }
+         st->mem_hp[0]=st->mem_hp[1]=0;
+         for (i=0;i<NB_NB_SUBFRAMES;i++)
+            st->pi_gain[i]=0;
+         st->level = st->max_level = st->min_level = 0;
+         st->last_pitch = 40;
+         st->last_pitch_gain = 0;
+         st->pitch_gain_buf[0] = st->pitch_gain_buf[1] = st->pitch_gain_buf[2] = 0;
+         st->pitch_gain_buf_idx = 0;
+         /* Restart the PLC pseudo-random sequence at its init point */
+         st->seed = 1000;
+         st->voc_m1=st->voc_m2=st->voc_mean=0;
+         st->voc_offset=0;
+         st->dtx_enabled=0;
+         /* The bitstream drives submodeID on every frame, so the last
+            decoded value is session history: restore the init default. */
+         st->submodeID = ((const SpeexNBMode*)(st->mode->mode))->defaultSubmode;
       }
       break;
    case SPEEX_SET_SUBMODE_ENCODING:
