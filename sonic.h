@@ -54,6 +54,8 @@ similar to high speed factors is used.
    sound quality slightly, at the expense of lots of floating point math. */
 /* #define SONIC_USE_SIN */
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -98,6 +100,7 @@ extern "C" {
 #define sonicGetUserData sonicIntGetUserData
 #define sonicSetUserData sonicIntSetUserData
 #define sonicSetNumChannels sonicIntSetNumChannels
+#define sonicSetSpeedTrack sonicIntSetSpeedTrack
 #define sonicChangeFloatSpeed sonicIntChangeFloatSpeed
 #define sonicChangeShortSpeed sonicIntChangeShortSpeed
 #define sonicEnableNonlinearSpeedup sonicIntEnableNonlinearSpeedup
@@ -134,8 +137,25 @@ extern "C" {
 /* These are used to down-sample some inputs to improve speed */
 #define SONIC_AMDF_FREQ 4000
 
+/* The largest input frame coordinate allowed in a speed track point.  This
+   is 2^53, the largest integer exactly representable as a double, which the
+   library uses for play-time integration. */
+#define SONIC_SPEED_TRACK_MAX_FRAME 9007199254740992ULL
+
 struct sonicStreamStruct;
 typedef struct sonicStreamStruct* sonicStream;
+
+/* A single node of a speed track.  inputFrame is a frame index into the
+   original (source) PCM stream, counting sample frames (one frame is one
+   sample per channel), starting at 0 for the first frame written after
+   stream creation or after the most recent sonicFlushStream call.  speed is
+   the pitch-preserving time-stretch factor that must be in effect at that
+   source frame.  Between nodes the speed is linearly interpolated in the
+   source-frame coordinate; after the last node the last speed is held. */
+typedef struct SonicSpeedPointStruct {
+  uint64_t inputFrame;
+  float speed;
+} SonicSpeedPoint;
 
 /* For all of the following functions, numChannels is multiplied by numSamples
    to determine the actual number of values read or returned. */
@@ -216,6 +236,37 @@ int sonicGetNumChannels(sonicStream stream);
 /* Set the number of channels.  This will drop any samples that have not been
  * read. */
 void sonicSetNumChannels(sonicStream stream, int numChannels);
+/* Install a speed track: a piecewise-linear speed curve indexed by source
+   (input) PCM frame.  This lets a single stream carry a recording whose
+   playback speed varies over time (for example, racing through long pauses
+   and returning to normal speed for speech) without splitting the audio into
+   separate streams, and the produced sound does not depend on the block
+   sizes used to feed the stream.
+
+   The track may only be installed before any non-empty input has been
+   written to the stream, and only when the stream is configured with
+   pitch = rate = 1.0, quality = 1, a sample rate of 16000 or 48000 Hz, and 1
+   or 2 channels.  points[0].inputFrame must be 0, inputFrame values must be
+   strictly increasing and at most SONIC_SPEED_TRACK_MAX_FRAME (2^53), and
+   every speed must be a finite value in [0.5, 2.0].  The library keeps its
+   own copy of the points.
+
+   While a track is installed, the speed at any moment is governed by the
+   track: calls to sonicSetSpeed, sonicSetPitch, sonicSetRate,
+   sonicSetQuality, sonicSetSampleRate and sonicSetNumChannels are rejected
+   (the previous values are kept).  sonicSetVolume keeps working.  The total
+   output duration is the integral of 1/speed over the source frames.
+   Flushing the stream resets the source-frame coordinate, so the next audio
+   written after a flush is stretched by the same track starting again at
+   frame 0.
+
+   Passing count = 0 (points may be NULL) removes the track and restores the
+   original fixed-speed mode.
+
+   Returns 1 on success.  Returns 0 if the track is rejected, in which case
+   the previous configuration is kept unchanged. */
+int sonicSetSpeedTrack(sonicStream stream, const SonicSpeedPoint* points,
+                       int count);
 /* This is a non-stream oriented interface to just change the speed of a sound
    sample.  It works in-place on the sample array, so there must be at least
    speed*numSamples available space in the array. Returns the new number of

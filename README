@@ -40,6 +40,41 @@ significantly reduces noise introduced by the pitch change algorithm.  It is
 most noticable in low-sample-rate streams, such as the 11,025 Hz output of the
 Eloquence TTS engine.  The upgrade is in both the C and Java versions.
 
+Speed tracks (variable speed over one stream)
+---------------------------------------------
+sonicSetSpeedTrack() installs a speed track: a piecewise-linear curve of
+playback speed versus position in the original recording.  It is meant for
+voice editing, where long pauses should be skipped quickly and speech should
+return gradually to normal speed, without splitting the recording into
+separate streams.  The sound produced does not depend on the block sizes
+used to feed audio into the stream.
+
+Coordinates: each SonicSpeedPoint gives an inputFrame, which is a frame
+index into the source PCM stream (one frame is one sample per channel),
+counted from 0 at the first frame written after stream creation or after
+the most recent sonicFlushStream() call.  The first point must be at frame
+0, frames must be strictly increasing and at most 2^53
+(SONIC_SPEED_TRACK_MAX_FRAME), and every speed must be a finite value in
+[0.5, 2.0].  Between points the speed is linearly interpolated in the
+source-frame coordinate; after the last point the last speed is held.  The
+library keeps its own copy of the points.  The total output duration is the
+integral of 1/speed over the source frames.
+
+Setting restrictions: a track may only be installed before any non-empty
+input has been written to the stream, and only when the stream is configured
+with pitch = rate = 1.0, quality = 1, a sample rate of 16000 or 48000 Hz,
+and 1 or 2 channels.  sonicSetSpeedTrack() returns 1 on success and 0 when
+the track is rejected, in which case the previous configuration is kept.
+While a track is installed, calls to sonicSetSpeed(), sonicSetPitch(),
+sonicSetRate(), sonicSetQuality(), sonicSetSampleRate() and
+sonicSetNumChannels() are rejected (the existing values are kept);
+sonicSetVolume() keeps working.  Passing an empty track (count = 0) removes
+the track and restores the original fixed-speed mode.
+
+Reuse: after sonicFlushStream(), the stream can be reused for the next
+segment exactly as with the plain library; the same track is applied to the
+new audio starting again at source frame 0.  Silence added by the flush only
+drains the buffers and is not part of the source coordinate system.
 
 Author: Bill Cox
 email: waywardgeek@gmail.com

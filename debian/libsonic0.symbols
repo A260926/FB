@@ -27,3 +27,4 @@ libsonic.so.0 libsonic0 #MINVER#
  sonicSetChordPitch@Base 0.1.13
  sonicSetNumChannels@Base 0.1.15
  sonicSetSampleRate@Base 0.1.15
+ sonicSetSpeedTrack@Base 0.2.0

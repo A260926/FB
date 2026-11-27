@@ -148,6 +148,10 @@ test: sonic_unit_test
 sonic_unit_test: tests/runtests.c tests/sonic_api_test.c tests/input_clamping_test.c tests/genwave.c sonic.c sonic.h tests/tests.h tests/genwave.h
 	$(CC) $(CFLAGS) -I. -o sonic_unit_test tests/runtests.c tests/sonic_api_test.c tests/input_clamping_test.c tests/genwave.c sonic.c -lm
 
+speed_track_test: tests/speed_track_test.c sonic.c sonic.h
+	$(CC) $(CFLAGS) -I. -o speed_track_test tests/speed_track_test.c sonic.c -lm
+	./speed_track_test
+
 coverage:
 	$(CC) $(CFLAGS) -I. -fprofile-arcs -ftest-coverage -o sonic_coverage tests/runtests.c tests/sonic_api_test.c tests/input_clamping_test.c tests/genwave.c sonic.c -lm
 	./sonic_coverage

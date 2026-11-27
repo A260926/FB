@@ -232,6 +232,19 @@ struct sonicStreamStruct {
   int sampleRate;
   int prevPeriod;
   int prevMinDiff;
+  /* Speed track state.  When speedTrackActive is non-zero, the playback
+     speed at any moment is a piecewise-linear function of the source
+     (input) frame coordinate, described by the speedTrack points (an owned
+     copy of the caller's array).  inputFramePos is the source frame index
+     of inputBuffer[0]; it advances as input is consumed, and resets to 0 on
+     flush so a reused stream applies the track from the start again. */
+  SonicSpeedPoint* speedTrack;
+  uint64_t inputFramePos;
+  int speedTrackCount;
+  int speedTrackActive;
+  /* Set once any non-empty input has been written.  A speed track may only
+     be installed before that happens. */
+  int everWroteInput;
 };
 
 /* Attach user data to the stream. */
@@ -280,6 +293,10 @@ float sonicGetSpeed(sonicStream stream) { return stream->speed; }
 
 /* Set the speed of the stream. */
 void sonicSetSpeed(sonicStream stream, float speed) {
+  if (stream->speedTrackActive) {
+    /* Speed is governed by the installed speed track. */
+    return;
+  }
   stream->speed = CLAMP(speed, SONIC_MIN_SPEED, SONIC_MAX_SPEED);
 }
 
@@ -288,6 +305,9 @@ float sonicGetPitch(sonicStream stream) { return stream->pitch; }
 
 /* Set the pitch of the stream. */
 void sonicSetPitch(sonicStream stream, float pitch) {
+  if (stream->speedTrackActive) {
+    return;
+  }
   stream->pitch = CLAMP(pitch, SONIC_MIN_PITCH_SETTING, SONIC_MAX_PITCH_SETTING);
 }
 
@@ -297,6 +317,9 @@ float sonicGetRate(sonicStream stream) { return stream->rate; }
 /* Set the playback rate of the stream. This scales pitch and speed at the same
    time. */
 void sonicSetRate(sonicStream stream, float rate) {
+  if (stream->speedTrackActive) {
+    return;
+  }
   stream->rate = CLAMP(rate, SONIC_MIN_RATE, SONIC_MAX_RATE);
 
   stream->oldRatePosition = 0;
@@ -316,6 +339,10 @@ int sonicGetQuality(sonicStream stream) { return stream->quality; }
 /* Set the "quality".  Default 0 is virtually as good as 1, but very much
    faster. */
 void sonicSetQuality(sonicStream stream, int quality) {
+  if (stream->speedTrackActive) {
+    /* Speed track mode requires quality 1. */
+    return;
+  }
   stream->quality = quality != 0? 1 : 0;
 }
 
@@ -350,6 +377,9 @@ void sonicDestroyStream(sonicStream stream) {
     sonicDestroySpectrogram(stream->spectrogram);
   }
 #endif /* SONIC_SPECTROGRAM */
+  if (stream->speedTrack != NULL) {
+    sonicFree(stream->speedTrack);
+  }
   freeStreamBuffers(stream);
   sonicFree(stream);
 }
@@ -444,6 +474,9 @@ int sonicGetSampleRate(sonicStream stream) { return stream->sampleRate; }
 /* Set the sample rate of the stream.  This will cause samples buffered in the
    stream to be lost. */
 void sonicSetSampleRate(sonicStream stream, int sampleRate) {
+  if (stream->speedTrackActive) {
+    return;
+  }
   sampleRate = CLAMP(sampleRate, SONIC_MIN_SAMPLE_RATE, SONIC_MAX_SAMPLE_RATE);
   freeStreamBuffers(stream);
   allocateStreamBuffers(stream, sampleRate, stream->numChannels);
@@ -455,9 +488,86 @@ int sonicGetNumChannels(sonicStream stream) { return stream->numChannels; }
 /* Set the num channels of the stream.  This will cause samples buffered in the
    stream to be lost. */
 void sonicSetNumChannels(sonicStream stream, int numChannels) {
+  if (stream->speedTrackActive) {
+    return;
+  }
   numChannels = CLAMP(numChannels, SONIC_MIN_CHANNELS, SONIC_MAX_CHANNELS);
   freeStreamBuffers(stream);
   allocateStreamBuffers(stream, stream->sampleRate, numChannels);
+}
+
+/* Install a speed track: a piecewise-linear speed curve indexed by source
+   (input) PCM frame.  Returns 1 on success, 0 if the track is rejected, in
+   which case the previous configuration is kept.  See sonic.h for the full
+   contract. */
+int sonicSetSpeedTrack(sonicStream stream, const SonicSpeedPoint* points,
+                       int count) {
+  SonicSpeedPoint* copy;
+  int i;
+
+  if (stream == NULL || count < 0) {
+    return 0;
+  }
+  /* A track may only be installed on a fresh stream, before any non-empty
+     input has been written. */
+  if (stream->everWroteInput) {
+    return 0;
+  }
+  if (count == 0) {
+    /* An empty track restores the original fixed-speed mode. */
+    if (stream->speedTrack != NULL) {
+      sonicFree(stream->speedTrack);
+      stream->speedTrack = NULL;
+    }
+    stream->speedTrackCount = 0;
+    stream->speedTrackActive = 0;
+    stream->inputFramePos = 0;
+    return 1;
+  }
+  if (points == NULL) {
+    return 0;
+  }
+  /* Track mode is currently limited to pitch = rate = 1.0, quality = 1, and
+     16kHz or 48kHz mono/stereo streams. */
+  if (stream->pitch != 1.0f || stream->rate != 1.0f || stream->quality != 1) {
+    return 0;
+  }
+  if ((stream->sampleRate != 16000 && stream->sampleRate != 48000) ||
+      (stream->numChannels != 1 && stream->numChannels != 2)) {
+    return 0;
+  }
+  /* The first point must be at source frame 0, coordinates must be strictly
+     increasing and at most 2^53, and speeds must be finite and in
+     [0.5, 2.0]. */
+  if (points[0].inputFrame != 0) {
+    return 0;
+  }
+  for (i = 0; i < count; i++) {
+    if (points[i].inputFrame > SONIC_SPEED_TRACK_MAX_FRAME) {
+      return 0;
+    }
+    if (!isfinite(points[i].speed) || points[i].speed < 0.5f ||
+        points[i].speed > 2.0f) {
+      return 0;
+    }
+    if (i > 0 && points[i].inputFrame <= points[i - 1].inputFrame) {
+      return 0;
+    }
+  }
+  /* The library keeps its own copy of the points. */
+  copy = (SonicSpeedPoint*)sonicCalloc(count, sizeof(SonicSpeedPoint));
+  if (copy == NULL) {
+    return 0;
+  }
+  memcpy(copy, points, count * sizeof(SonicSpeedPoint));
+  if (stream->speedTrack != NULL) {
+    sonicFree(stream->speedTrack);
+  }
+  stream->speedTrack = copy;
+  stream->speedTrackCount = count;
+  stream->speedTrackActive = 1;
+  stream->inputFramePos = 0;
+  return 1;
 }
 
 /* Enlarge the output buffer if needed. */
@@ -572,6 +682,8 @@ static void removeInputSamples(sonicStream stream, int position) {
   stream->inputPlayTime =
       (stream->inputPlayTime * remainingSamples) / stream->numInputSamples;
   stream->numInputSamples = remainingSamples;
+  /* The source frame coordinate of the buffer head moves forward. */
+  stream->inputFramePos += position;
 }
 
 /* Copy from the input buffer to the output buffer, and remove the samples from
@@ -683,6 +795,11 @@ int sonicReadUnsignedCharFromStream(sonicStream stream, unsigned char* samples,
   return numSamples;
 }
 
+/* The number of output frames the source frame range [f0, f1) should
+   produce under the installed speed track.  Defined below. */
+static double trackIntegralFrames(sonicStream stream, uint64_t f0,
+                                  uint64_t f1);
+
 /* Force the sonic stream to generate output using whatever data it currently
    has.  No extra delay will be added to the output, but flushing in the middle
    of words could introduce distortion. */
@@ -691,9 +808,25 @@ int sonicFlushStream(sonicStream stream) {
   int remainingSamples = stream->numInputSamples;
   float speed = stream->speed / stream->pitch;
   float rate = stream->rate * stream->pitch;
-  int expectedOutputSamples =
-      stream->numOutputSamples +
-      (int)((remainingSamples / speed + stream->numPitchSamples) / rate + 0.5f);
+  int expectedOutputSamples;
+
+  if (stream->speedTrackActive) {
+    /* The silence padding below only serves to push out audio that is
+       already buffered; it is not part of the source coordinate system, so
+       the expected output is the integral of 1/speed over the real input
+       frames only. */
+    expectedOutputSamples =
+        stream->numOutputSamples +
+        (int)(trackIntegralFrames(stream, stream->inputFramePos,
+                                  stream->inputFramePos +
+                                      (uint64_t)remainingSamples) +
+              stream->numPitchSamples + 0.5);
+  } else {
+    expectedOutputSamples =
+        stream->numOutputSamples +
+        (int)((remainingSamples / speed + stream->numPitchSamples) / rate +
+              0.5f);
+  }
 
   /* Add enough silence to flush both input and pitch buffers. */
   if (!enlargeInputBufferIfNeeded(stream, remainingSamples + 2 * maxRequired)) {
@@ -714,6 +847,9 @@ int sonicFlushStream(sonicStream stream) {
   stream->inputPlayTime = 0.0f;
   stream->timeError = 0.0f;
   stream->numPitchSamples = 0;
+  /* The next audio written to the stream is a new segment: the speed track
+     is applied to it starting again at source frame 0. */
+  stream->inputFramePos = 0;
   return 1;
 }
 
@@ -1082,6 +1218,240 @@ static int copyUnmodifiedSamples(sonicStream stream, short* samples,
   return 1;
 }
 
+/* Return the index of the speed track node that is in effect at the given
+   source frame: the largest i such that track[i].inputFrame <= frame. */
+static int trackSegmentIndex(sonicStream stream, uint64_t frame) {
+  const SonicSpeedPoint* track = stream->speedTrack;
+  int lo = 0;
+  int hi = stream->speedTrackCount - 1;
+
+  while (lo < hi) {
+    int mid = lo + (hi - lo + 1) / 2;
+    if (track[mid].inputFrame <= frame) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}
+
+/* The speed in effect at the given source frame: linear interpolation
+   between neighboring nodes, with the last speed held past the final
+   node. */
+static float trackSpeedAt(sonicStream stream, uint64_t frame) {
+  const SonicSpeedPoint* track = stream->speedTrack;
+  int count = stream->speedTrackCount;
+  int i;
+  uint64_t f0, f1;
+  float s0, s1;
+
+  if (frame >= track[count - 1].inputFrame) {
+    return track[count - 1].speed;
+  }
+  i = trackSegmentIndex(stream, frame);
+  f0 = track[i].inputFrame;
+  f1 = track[i + 1].inputFrame;
+  s0 = track[i].speed;
+  s1 = track[i + 1].speed;
+  return (float)(s0 + (double)(s1 - s0) * (double)(frame - f0) /
+                      (double)(f1 - f0));
+}
+
+/* The number of output frames the source frame range [f0, f1) should
+   produce: the integral of 1/speed over the range, where speed is the
+   piecewise-linear track curve.  Computed analytically per track segment:
+   the integral of df over a linear speed ramp from s0 to s1 is
+   span*log(s1/s0)/(s1 - s0). */
+static double trackIntegralFrames(sonicStream stream, uint64_t f0,
+                                  uint64_t f1) {
+  const SonicSpeedPoint* track = stream->speedTrack;
+  int count = stream->speedTrackCount;
+  double total = 0.0;
+  int i;
+
+  if (f1 <= f0) {
+    return 0.0;
+  }
+  i = trackSegmentIndex(stream, f0);
+  while (f0 < f1) {
+    uint64_t segEnd = (i + 1 < count) ? track[i + 1].inputFrame : f1;
+    uint64_t x1 = f1 < segEnd ? f1 : segEnd;
+    double s0 = trackSpeedAt(stream, f0);
+    double s1 = trackSpeedAt(stream, x1);
+    double span = (double)(x1 - f0);
+
+    if (s0 == s1) {
+      total += span / s0;
+    } else {
+      total += span * log(s1 / s0) / (s1 - s0);
+    }
+    f0 = x1;
+    i++;
+  }
+  return total;
+}
+
+/* The number of source frames from frame over which the track speed is
+   exactly 1.0.  This is at least 1 whenever the speed at frame is exactly
+   1.0; an isolated unity point on a ramp counts as a single frame. */
+static uint64_t trackUnityRunLength(sonicStream stream, uint64_t frame) {
+  const SonicSpeedPoint* track = stream->speedTrack;
+  int count = stream->speedTrackCount;
+  int i;
+
+  if (trackSpeedAt(stream, frame) != 1.0f) {
+    return 0;
+  }
+  i = trackSegmentIndex(stream, frame);
+  if (i + 1 >= count) {
+    /* At or past the last node, and the speed there is exactly 1.0. */
+    return UINT64_MAX;
+  }
+  if (track[i].speed == 1.0f && track[i + 1].speed == 1.0f) {
+    /* The whole segment to the next node is unit speed. */
+    return track[i + 1].inputFrame - frame;
+  }
+  /* Isolated unity point on a ramp: only this one frame is exactly 1.0. */
+  return 1;
+}
+
+/* Return 1 if the track speed is exactly 1.0 over the whole source frame
+   range [f0, f1). */
+static int trackRangeIsUnity(sonicStream stream, uint64_t f0, uint64_t f1) {
+  const SonicSpeedPoint* track = stream->speedTrack;
+  int count = stream->speedTrackCount;
+  int i;
+
+  if (f1 <= f0) {
+    return 1;
+  }
+  if (trackSpeedAt(stream, f0) != 1.0f ||
+      trackSpeedAt(stream, f1 - 1) != 1.0f) {
+    return 0;
+  }
+  for (i = 0; i < count; i++) {
+    if (track[i].inputFrame > f0 && track[i].inputFrame < f1 &&
+        track[i].speed != 1.0f) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/* Speed track version of changeSpeed.  The speed is a function of the
+   absolute source frame coordinate, so the produced sound does not depend on
+   how the caller chunks writes.  Analysis windows crossing track nodes are
+   handled continuously: the pitch period history and the timeError servo are
+   never reset, no silence is inserted at nodes, and segments are never
+   rendered separately.  The expected play time of every consumed span of
+   input is computed exactly from the track, so the total output tracks the
+   integral of 1/speed over the source frames. */
+static int changeSpeedTrack(sonicStream stream) {
+  short* samples;
+  int numSamples = stream->numInputSamples;
+  int numChannels = stream->numChannels;
+  int position = 0, period, newSamples;
+  int maxRequired = stream->maxRequired;
+  uint64_t base = stream->inputFramePos;
+  uint64_t absPos;
+  float speed;
+
+  if (numSamples < maxRequired) {
+    return 1;
+  }
+  do {
+    samples = stream->inputBuffer + position * numChannels;
+    absPos = base + (uint64_t)position;
+    speed = trackSpeedAt(stream, absPos);
+    if (speed == 1.0f) {
+      /* Exactly unit speed: copy input to output verbatim for the length
+         of the unity run (a whole unit-speed segment, or a single frame
+         for an isolated unity point on a ramp). */
+      uint64_t run = trackUnityRunLength(stream, absPos);
+      int availableSamples = numSamples - position;
+
+      newSamples = availableSamples;
+      if (run < (uint64_t)newSamples) {
+        newSamples = (int)run;
+      }
+      if (newSamples <= 0) {
+        newSamples = 1;
+      }
+      if (!copyToOutput(stream, samples, newSamples)) {
+        return 0;
+      }
+      stream->timeError +=
+          (float)((newSamples -
+                   trackIntegralFrames(stream, absPos,
+                                       absPos + (uint64_t)newSamples)) *
+                  stream->samplePeriod);
+      position += newSamples;
+    } else if ((speed > 1.0f && stream->timeError < 0.0f) ||
+               (speed < 1.0f && stream->timeError > 0.0f)) {
+      /* PICOLA is still copying input samples to output unmodified.  The
+         copy amount computed from the local speed is only valid while the
+         speed is nearly constant over the copied span, so it is limited to
+         one maxPeriod: the timeError servo then re-evaluates the exact
+         track integral after every small batch, which keeps the produced
+         sound independent of the caller's write chunking. */
+      int availableSamples = numSamples - position;
+      float inputToCopyFloat =
+          1 -
+          stream->timeError * speed / (stream->samplePeriod * (speed - 1.0f));
+
+      newSamples = inputToCopyFloat > availableSamples
+                       ? availableSamples
+                       : (int)inputToCopyFloat;
+      if (newSamples > stream->maxPeriod) {
+        newSamples = stream->maxPeriod;
+      }
+      if (newSamples <= 0) {
+        newSamples = 1;
+      }
+      if (!copyToOutput(stream, samples, newSamples)) {
+        return 0;
+      }
+      stream->timeError +=
+          (float)((newSamples -
+                   trackIntegralFrames(stream, absPos,
+                                       absPos + (uint64_t)newSamples)) *
+                  stream->samplePeriod);
+      position += newSamples;
+    } else {
+      /* Insert or remove a pitch period.  Since track speeds are always in
+         [0.5, 2.0], newSamples is always exactly one period. */
+      period = findPitchPeriod(stream, samples, 1);
+      if (speed > 1.0f) {
+        newSamples = skipPitchPeriod(stream, samples, speed, period);
+        if (newSamples == 0) {
+          return 0; /* Failed to resize output buffer */
+        }
+        stream->timeError +=
+            (float)((newSamples -
+                     trackIntegralFrames(
+                         stream, absPos,
+                         absPos + (uint64_t)(period + newSamples))) *
+                    stream->samplePeriod);
+        position += period + newSamples;
+      } else {
+        newSamples = insertPitchPeriod(stream, samples, speed, period);
+        if (newSamples == 0) {
+          return 0; /* Failed to resize output buffer */
+        }
+        stream->timeError +=
+            (float)((period + newSamples -
+                     trackIntegralFrames(
+                         stream, absPos, absPos + (uint64_t)newSamples)) *
+                    stream->samplePeriod);
+        position += newSamples;
+      }
+    }
+  } while (position + maxRequired <= numSamples);
+  removeInputSamples(stream, position);
+  return 1;
+}
+
 /* Resample as many pitch periods as we have buffered on the input.  Return 0 if
    we fail to resize an input or output buffer. */
 static int changeSpeed(sonicStream stream, float speed) {
@@ -1153,13 +1523,28 @@ static int processStreamInput(sonicStream stream) {
   if (stream->numInputSamples == 0) {
     return 1;
   }
-  localSpeed =
-      stream->numInputSamples * stream->samplePeriod / stream->inputPlayTime;
-  if (localSpeed > 1.00001 || localSpeed < 0.99999) {
-    changeSpeed(stream, localSpeed);
-  } else {
-    if (!copyInputToOutput(stream, stream->numInputSamples)) {
+  if (stream->speedTrackActive) {
+    /* The speed is a function of the source frame coordinate.  A range that
+       is entirely unit speed is copied through unchanged, just like the
+       original unit-speed mode. */
+    if (trackRangeIsUnity(
+            stream, stream->inputFramePos,
+            stream->inputFramePos + (uint64_t)stream->numInputSamples)) {
+      if (!copyInputToOutput(stream, stream->numInputSamples)) {
+        return 0;
+      }
+    } else if (!changeSpeedTrack(stream)) {
       return 0;
+    }
+  } else {
+    localSpeed =
+        stream->numInputSamples * stream->samplePeriod / stream->inputPlayTime;
+    if (localSpeed > 1.00001 || localSpeed < 0.99999) {
+      changeSpeed(stream, localSpeed);
+    } else {
+      if (!copyInputToOutput(stream, stream->numInputSamples)) {
+        return 0;
+      }
     }
   }
   if (rate != 1.0f) {
@@ -1181,6 +1566,9 @@ static int processStreamInput(sonicStream stream) {
 /* Write floating point data to the input buffer and process it. */
 int sonicWriteFloatToStream(sonicStream stream, const float* samples,
                             int numSamples) {
+  if (numSamples > 0) {
+    stream->everWroteInput = 1;
+  }
   if (!addFloatSamplesToInputBuffer(stream, samples, numSamples)) {
     return 0;
   }
@@ -1191,6 +1579,9 @@ int sonicWriteFloatToStream(sonicStream stream, const float* samples,
    conversion for you. */
 int sonicWriteShortToStream(sonicStream stream, const short* samples,
                             int numSamples) {
+  if (numSamples > 0) {
+    stream->everWroteInput = 1;
+  }
   if (!addShortSamplesToInputBuffer(stream, samples, numSamples)) {
     return 0;
   }
@@ -1202,6 +1593,9 @@ int sonicWriteShortToStream(sonicStream stream, const short* samples,
 int sonicWriteUnsignedCharToStream(sonicStream stream,
                                    const unsigned char* samples,
                                    int numSamples) {
+  if (numSamples > 0) {
+    stream->everWroteInput = 1;
+  }
   if (!addUnsignedCharSamplesToInputBuffer(stream, samples, numSamples)) {
     return 0;
   }
