@@ -52,6 +52,18 @@ class hittable {
     virtual vec3 random(const point3& origin) const {
         return vec3(1,0,0);
     }
+
+    // Time-aware sampling entry points. The default implementation falls back to the
+    // time-less virtual functions, so custom hittables that only override the old
+    // interface keep working (they are evaluated as if at time = 0).
+    virtual double pdf_value(const point3& origin, const vec3& direction, double time)
+    const {
+        return pdf_value(origin, direction);
+    }
+
+    virtual vec3 random(const point3& origin, double time) const {
+        return random(origin);
+    }
 };
 
 
@@ -78,6 +90,17 @@ class translate : public hittable {
     }
 
     aabb bounding_box() const override { return bbox; }
+
+    using hittable::pdf_value;
+    using hittable::random;
+    double pdf_value(const point3& origin, const vec3& direction, double time)
+    const override {
+        return object->pdf_value(origin - offset, direction, time);
+    }
+
+    vec3 random(const point3& origin, double time) const override {
+        return object->random(origin - offset, time);
+    }
 
   private:
     shared_ptr<hittable> object;
@@ -161,6 +184,39 @@ class rotate_y : public hittable {
     }
 
     aabb bounding_box() const override { return bbox; }
+
+    using hittable::pdf_value;
+    using hittable::random;
+    double pdf_value(const point3& origin, const vec3& direction, double time)
+    const override {
+        // Rotate the query point and direction back into object space.
+        auto local_origin = point3(
+            (cos_theta * origin.x()) - (sin_theta * origin.z()),
+            origin.y(),
+            (sin_theta * origin.x()) + (cos_theta * origin.z())
+        );
+        auto local_direction = vec3(
+            (cos_theta * direction.x()) - (sin_theta * direction.z()),
+            direction.y(),
+            (sin_theta * direction.x()) + (cos_theta * direction.z())
+        );
+        return object->pdf_value(local_origin, local_direction, time);
+    }
+
+    vec3 random(const point3& origin, double time) const override {
+        auto local_origin = point3(
+            (cos_theta * origin.x()) - (sin_theta * origin.z()),
+            origin.y(),
+            (sin_theta * origin.x()) + (cos_theta * origin.z())
+        );
+        // Rotate the locally generated direction back into world space.
+        auto local_dir = object->random(local_origin, time);
+        return vec3(
+            (cos_theta * local_dir.x()) + (sin_theta * local_dir.z()),
+            local_dir.y(),
+            (-sin_theta * local_dir.x()) + (cos_theta * local_dir.z())
+        );
+    }
 
   private:
     shared_ptr<hittable> object;

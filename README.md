@@ -187,6 +187,70 @@ If you spot errors, have suggested corrections, or would like to help out with t
 _**please review the [CONTRIBUTING][] document for the most effective way to proceed.**_
 
 
+Moving Affine Area Lights (`affine_instance`)
+----------------------------------------------
+`src/TheRestOfYourLife/affine_light.h` adds `affine_instance`, a reusable wrapper that turns
+any `hittable` into a moving affine light. A local point `p` is placed in world space at
+shutter time `t` in `[0,1]` as
+
+    world(p, t) = A * p + b(t),   b(t) = (1-t)*b0 + t*b1
+
+### Matrix layout
+
+`A` is passed as a row-major C array `double A[3][3]`, i.e. `A[row][column]`, so
+
+    (A * p)[i] = A[i][0]*p.x() + A[i][1]*p.y() + A[i][2]*p.z()
+
+Non-uniform scaling, shearing and negative determinants (mirroring) are all supported. The
+matrix and both translation endpoints are copied at construction. Inputs containing
+non-finite values, or a singular `A`, are rejected: the `affine_instance::make` factory
+returns a null pointer and a directly constructed object reports `is_valid() == false`.
+Wrappers may be nested, and several instances may share one source object that itself stays
+stationary. The inverse and the inverse transpose (for normals) are precomputed once.
+
+### Time entry points
+
+`hittable` gains time-aware sampling entry points alongside the original ones:
+
+    virtual double pdf_value(const point3& origin, const vec3& direction, double time) const;
+    virtual vec3       random     (const point3& origin, double time) const;
+
+The base-class defaults forward to the old time-less virtual functions, so a custom
+hittable that only implements the old interface keeps working and is evaluated as if at
+time `0`. `hittable_list`, `translate`, `rotate_y`, `sphere`, `quad` and
+`affine_instance` override the new entry points and forward the same shutter time down the
+whole wrapper chain; the old virtual functions and their call sites are unchanged.
+`hittable_pdf` keeps its two-argument constructor (original dispatch) and adds a
+three-argument constructor carrying a time. `camera` adds `enable_time_lights` (default
+`false`); when enabled, the light half of the `mixture_pdf` is built with the current path
+ray's time, and every later bounce reuses that same time. Rays keep their parameter `t`,
+so a hit on a transformed unnormalized ray still satisfies `r.at(t)` exactly.
+
+### Density measure
+
+Proposals keep the local object's own `random()`/`pdf_value()` distribution; they are not
+re-sampled uniformly over the world surface. The world direction is `d_world = A d_local`,
+and the returned density is a world solid-angle density. Under a linear direction map the
+solid-angle Jacobian is
+
+    dOmega_world = |det A| * |d_local|^3 / |A d_local|^3 * dOmega_local
+
+so
+
+    pdf_world(origin, d_world, t)
+        = pdf_local(A^-1 (origin - b(t)), A^-1 d_world, t)
+          * |A d_local|^3 / (|det A| * |d_local|^3)
+
+This is invariant under any positive rescaling of the query direction and stays
+non-negative when `det A < 0`; it is never approximated by an area ratio or a determinant
+division alone. A zero or non-finite query direction has zero density and a time outside
+`[0,1]` is rejected. The bounds cover the full shutter sweep by transforming the eight
+local bounding-box corners at both translation endpoints.
+
+The task tests live in `tests/affine_light_cases.cpp` (geometry, density and transport
+groups, run via `bash task_support/run.sh target`).
+
+
 
 [book1]:           books/RayTracingInOneWeekend.html
 [book2]:           books/RayTracingTheNextWeek.html

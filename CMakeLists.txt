@@ -57,6 +57,7 @@ set ( SOURCE_NEXT_WEEK
 set ( SOURCE_REST_OF_YOUR_LIFE
   src/TheRestOfYourLife/main.cc
   src/TheRestOfYourLife/aabb.h
+  src/TheRestOfYourLife/affine_light.h
   src/TheRestOfYourLife/camera.h
   src/TheRestOfYourLife/color.h
   src/TheRestOfYourLife/constant_medium.h

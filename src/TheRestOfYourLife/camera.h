@@ -32,6 +32,11 @@ class camera {
     double defocus_angle = 0;  // Variation angle of rays through each pixel
     double focus_dist = 10;    // Distance from camera lookfrom point to plane of perfect focus
 
+    // When false (the default), light sampling behaves exactly as before. When true,
+    // the light proposal uses the current path ray's shutter time, and every later
+    // bounce keeps using that same time.
+    bool enable_time_lights = false;
+
     void render(const hittable& world, const hittable& lights) {
         initialize();
 
@@ -170,7 +175,11 @@ class camera {
             return srec.attenuation * ray_color(srec.skip_pdf_ray, depth-1, world, lights);
         }
 
-        auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
+        shared_ptr<hittable_pdf> light_ptr;
+        if (enable_time_lights)
+            light_ptr = make_shared<hittable_pdf>(lights, rec.p, r.time());
+        else
+            light_ptr = make_shared<hittable_pdf>(lights, rec.p);
         mixture_pdf p(light_ptr, srec.pdf_ptr);
 
         ray scattered = ray(rec.p, p.generate(), r.time());

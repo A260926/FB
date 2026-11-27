@@ -1,0 +1,28 @@
+Scanlines remaining: 1 Done.                 
+Scanlines remaining: 1 Done.                 
+Scanlines remaining: 8 Scanlines remaining: 7 Scanlines remaining: 6 Scanlines remaining: 5 Scanlines remaining: 4 Scanlines remaining: 3 Scanlines remaining: 2 Scanlines remaining: 1 Done.                 
+Scanlines remaining: 8 Scanlines remaining: 7 Scanlines remaining: 6 Scanlines remaining: 5 Scanlines remaining: 4 Scanlines remaining: 3 Scanlines remaining: 2 Scanlines remaining: 1 Done.                 
+Scanlines remaining: 8 Scanlines remaining: 7 Scanlines remaining: 6 Scanlines remaining: 5 Scanlines remaining: 4 Scanlines remaining: 3 Scanlines remaining: 2 Scanlines remaining: 1 Done.                 
+Scanlines remaining: 8 Scanlines remaining: 7 Scanlines remaining: 6 Scanlines remaining: 5 Scanlines remaining: 4 Scanlines remaining: 3 Scanlines remaining: 2 Scanlines remaining: 1 Done.                 
+CASE geometry sheared_ellipsoid_ray_normal_uv checks=35
+CASE geometry mirror_negative_determinant checks=10
+CASE geometry nested_translate_rotate_motion checks=131
+CASE geometry bvh_full_shutter_coverage checks=714
+CASE geometry shared_source_stays_still checks=8
+CASE geometry reject_singular_nonfinite_input checks=7
+GROUP geometry cases=6 checks=905 COMPLETE
+CASE density solid_angle_jacobian_cap_difference checks=74
+quad normalization estimate=1.01395 standard_error=0.0164113
+CASE density histogram_and_sphere_normalization checks=12007
+CASE density motion_two_instance_list_legacy checks=18
+CASE density zero_nonfinite_illegal_time_guards checks=10
+GROUP density cases=4 checks=12109 COMPLETE
+CASE transport single_ray_time_consistency checks=10
+CASE transport multi_ray_proposal_times checks=343
+CASE transport fixed_time_pdf_vs_grid_integral checks=23
+PPM samples=1024 reference_byte=187.441 rendered_mean_byte=189 mean_error=1.55938
+OCCLUDED samples=1024 rendered_mean_byte=61.25
+STATIC samples=1024 reference_byte=196.16 rendered_mean_byte=199.906 mean_error=3.74597
+CASE transport rendered_ppm_vs_shutter_integral checks=9
+GROUP transport cases=4 checks=385 COMPLETE
+TARGET_COMPLETE cases=14

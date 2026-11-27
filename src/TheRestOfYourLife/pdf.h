@@ -58,21 +58,34 @@ class cosine_pdf : public pdf {
 
 class hittable_pdf : public pdf {
   public:
+    // Original two-argument constructor: dispatches through the time-less entry
+    // points exactly as before.
     hittable_pdf(const hittable& objects, const point3& origin)
-      : objects(objects), origin(origin)
+      : objects(objects), origin(origin), time(0), has_time(false)
+    {}
+
+    // Time-aware constructor: every value/generate call uses the same shutter time.
+    hittable_pdf(const hittable& objects, const point3& origin, double time)
+      : objects(objects), origin(origin), time(time), has_time(true)
     {}
 
     double value(const vec3& direction) const override {
+        if (has_time)
+            return objects.pdf_value(origin, direction, time);
         return objects.pdf_value(origin, direction);
     }
 
     vec3 generate() const override {
+        if (has_time)
+            return objects.random(origin, time);
         return objects.random(origin);
     }
 
   private:
     const hittable& objects;
     point3 origin;
+    double time;
+    bool has_time;
 };
 
 
