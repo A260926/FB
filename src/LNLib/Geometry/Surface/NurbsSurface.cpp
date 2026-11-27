@@ -1650,10 +1650,555 @@ void LNLib::NurbsSurface::Reparametrize(const LN_NurbsSurface& surface, double m
 
 	std::vector<double> newKnotVectorU = KnotVectorUtils::Rescale(knotVectorU, minU, maxU);
 	std::vector<double> newKnotVectorV = KnotVectorUtils::Rescale(knotVectorV, minV, maxV);
-	
+
 	result = surface;
 	result.KnotVectorU = newKnotVectorU;
 	result.KnotVectorV = newKnotVectorV;
+}
+
+namespace
+{
+	using LNLib::LN_NurbsSurface;
+	using LNLib::XYZW;
+
+	// Structural validation for NurbsSurface::JoinAlongU.
+	// Every violation throws std::invalid_argument; rectangle and dimension
+	// checks run before anything that could touch an evaluator.
+	void JoinValidateSurface(const LN_NurbsSurface& surface)
+	{
+		VALIDATE_ARGUMENT(surface.DegreeU >= 1 && surface.DegreeU <= 5, "degreeU", "DegreeU must be in [1,5].");
+		VALIDATE_ARGUMENT(surface.DegreeV >= 1 && surface.DegreeV <= 5, "degreeV", "DegreeV must be in [1,5].");
+
+		const std::vector<std::vector<XYZW>>& controlPoints = surface.ControlPoints;
+		VALIDATE_ARGUMENT(!controlPoints.empty() && !controlPoints[0].empty(), "controlPoints", "ControlPoints must not be empty.");
+		size_t columns = controlPoints[0].size();
+		for (size_t i = 0; i < controlPoints.size(); ++i)
+		{
+			VALIDATE_ARGUMENT(controlPoints[i].size() == columns, "controlPoints", "ControlPoints must form a rectangular net.");
+		}
+		VALIDATE_ARGUMENT(surface.KnotVectorU.size() == controlPoints.size() + surface.DegreeU + 1, "knotVectorU", "KnotVectorU size must equal control point rows plus DegreeU plus one.");
+		VALIDATE_ARGUMENT(surface.KnotVectorV.size() == columns + surface.DegreeV + 1, "knotVectorV", "KnotVectorV size must equal control point columns plus DegreeV plus one.");
+
+		const std::vector<double>* knotVectors[2] = { &surface.KnotVectorU, &surface.KnotVectorV };
+		int degrees[2] = { surface.DegreeU, surface.DegreeV };
+		for (int axis = 0; axis < 2; ++axis)
+		{
+			const std::vector<double>& knots = *knotVectors[axis];
+			int degree = degrees[axis];
+			for (size_t i = 0; i < knots.size(); ++i)
+			{
+				VALIDATE_ARGUMENT(std::isfinite(knots[i]), "knotVector", "Knots must be finite.");
+				if (i > 0)
+				{
+					VALIDATE_ARGUMENT(knots[i] >= knots[i - 1], "knotVector", "KnotVector must be a nondecreasing sequence.");
+				}
+			}
+			for (int i = 0; i <= degree; ++i)
+			{
+				VALIDATE_ARGUMENT(knots[i] == knots[0], "knotVector", "Surface must be clamped: the first degree+1 knots must coincide.");
+				VALIDATE_ARGUMENT(knots[knots.size() - 1 - i] == knots[knots.size() - 1], "knotVector", "Surface must be clamped: the last degree+1 knots must coincide.");
+			}
+			VALIDATE_ARGUMENT(knots[knots.size() - 1] > knots[0], "knotVector", "Parameter domain width must be positive.");
+			size_t index = static_cast<size_t>(degree) + 1;
+			while (index + degree + 1 < knots.size())
+			{
+				double value = knots[index];
+				int multiplicity = 0;
+				while (index + degree + 1 < knots.size() && knots[index] == value)
+				{
+					++multiplicity;
+					++index;
+				}
+				VALIDATE_ARGUMENT(multiplicity <= degree, "knotVector", "Internal knot multiplicity must not exceed the degree.");
+			}
+		}
+
+		for (size_t i = 0; i < controlPoints.size(); ++i)
+		{
+			for (size_t j = 0; j < controlPoints[i].size(); ++j)
+			{
+				const XYZW& point = controlPoints[i][j];
+				for (int c = 0; c < 4; ++c)
+				{
+					VALIDATE_ARGUMENT(std::isfinite(point[c]), "controlPoints", "Control point coordinates must be finite.");
+				}
+				VALIDATE_ARGUMENT(point.GetW() > 0.0, "controlPoints", "Weights must be positive.");
+			}
+		}
+	}
+
+	// Gauge normalization (all homogeneous control points are divided by the weight of the
+	// first control point), parameter normalization of both axes to [0,1], and optional
+	// reversal of the V direction, in this order.
+	LN_NurbsSurface JoinNormalize(const LN_NurbsSurface& surface, bool reverseV)
+	{
+		LN_NurbsSurface output;
+		output.DegreeU = surface.DegreeU;
+		output.DegreeV = surface.DegreeV;
+
+		double gauge = surface.ControlPoints[0][0].GetW();
+		output.ControlPoints.resize(surface.ControlPoints.size());
+		for (size_t i = 0; i < surface.ControlPoints.size(); ++i)
+		{
+			output.ControlPoints[i].resize(surface.ControlPoints[i].size());
+			for (size_t j = 0; j < surface.ControlPoints[i].size(); ++j)
+			{
+				output.ControlPoints[i][j] = surface.ControlPoints[i][j] / gauge;
+			}
+		}
+
+		output.KnotVectorU = LNLib::KnotVectorUtils::Rescale(surface.KnotVectorU, 0.0, 1.0);
+		output.KnotVectorV = LNLib::KnotVectorUtils::Rescale(surface.KnotVectorV, 0.0, 1.0);
+
+		if (reverseV)
+		{
+			for (size_t i = 0; i < output.ControlPoints.size(); ++i)
+			{
+				std::reverse(output.ControlPoints[i].begin(), output.ControlPoints[i].end());
+			}
+			std::vector<double> reversed(output.KnotVectorV.size());
+			for (size_t i = 0; i < output.KnotVectorV.size(); ++i)
+			{
+				reversed[i] = 1.0 - output.KnotVectorV[output.KnotVectorV.size() - 1 - i];
+			}
+			output.KnotVectorV = reversed;
+		}
+		return output;
+	}
+
+	// The NURBS Book 2nd Edition Page206
+	// Algorithm A5.9: degree elevate a clamped B-spline curve [times] times.
+	// Self-contained variant whose output sizes are derived from the number of distinct
+	// interior knots, so curves with repeated interior knots are elevated correctly.
+	void JoinElevateCurveDegree(int degree, const std::vector<double>& knotVector, const std::vector<XYZW>& controlPoints, int times,
+		std::vector<double>& elevatedKnotVector, std::vector<XYZW>& elevatedControlPoints)
+	{
+		int n = static_cast<int>(controlPoints.size()) - 1;
+		int m = n + degree + 1;
+		int ph = degree + times;
+		int ph2 = ph / 2;
+
+		std::vector<std::vector<double>> bezalfs(ph + 1, std::vector<double>(degree + 1, 0.0));
+		bezalfs[0][0] = bezalfs[ph][degree] = 1.0;
+		for (int i = 1; i <= ph2; i++)
+		{
+			double inv = 1.0 / LNLib::MathUtils::Binomial(ph, i);
+			int mpi = std::min(degree, i);
+			for (int j = std::max(0, i - times); j <= mpi; j++)
+			{
+				bezalfs[i][j] = inv * LNLib::MathUtils::Binomial(degree, j) * LNLib::MathUtils::Binomial(times, i - j);
+			}
+		}
+		for (int i = ph2 + 1; i <= ph - 1; i++)
+		{
+			int mpi = std::min(degree, i);
+			for (int j = std::max(0, i - times); j <= mpi; j++)
+			{
+				bezalfs[i][j] = bezalfs[ph - i][degree - j];
+			}
+		}
+
+		int distinctInterior = 0;
+		for (int i = degree + 1; i < m - degree;)
+		{
+			++distinctInterior;
+			double value = knotVector[i];
+			while (i < m - degree && knotVector[i] == value)
+			{
+				++i;
+			}
+		}
+		int nh = n + (distinctInterior + 1) * times;
+
+		elevatedControlPoints.assign(nh + 1, XYZW(0.0, 0.0, 0.0, 0.0));
+		elevatedKnotVector.assign(nh + ph + 2, 0.0);
+
+		int kind = ph + 1;
+		int r = -1;
+		int a = degree;
+		int b = degree + 1;
+		int cind = 1;
+		double ua = knotVector[0];
+
+		elevatedControlPoints[0] = controlPoints[0];
+		for (int i = 0; i <= ph; ++i)
+		{
+			elevatedKnotVector[i] = ua;
+		}
+
+		std::vector<XYZW> bpts(degree + 1);
+		for (int i = 0; i <= degree; ++i)
+		{
+			bpts[i] = controlPoints[i];
+		}
+		std::vector<XYZW> nextbpts(degree > 1 ? degree - 1 : 0);
+		std::vector<XYZW> ebpts(ph + 1, XYZW(0.0, 0.0, 0.0, 0.0));
+
+		while (b < m)
+		{
+			int i = b;
+			while (b < m && knotVector[b + 1] == knotVector[b])
+			{
+				b = b + 1;
+			}
+			int mul = b - i + 1;
+			double ub = knotVector[b];
+
+			int oldr = r;
+			r = degree - mul;
+
+			int lbz = (oldr > 0) ? (oldr + 2) / 2 : 1;
+			int rbz = (r > 0) ? (ph - (r + 1) / 2) : ph;
+
+			if (r > 0)
+			{
+				double numer = ub - ua;
+				std::vector<double> alfs(degree > 1 ? degree - 1 : 0);
+				for (int k = degree; k > mul; k--)
+				{
+					alfs[k - mul - 1] = numer / (knotVector[a + k] - ua);
+				}
+				for (int j = 1; j <= r; j++)
+				{
+					int save = r - j;
+					int s = mul + j;
+					for (int k = degree; k >= s; k--)
+					{
+						bpts[k] = alfs[k - s] * bpts[k] + (1.0 - alfs[k - s]) * bpts[k - 1];
+					}
+					nextbpts[save] = bpts[degree];
+				}
+			}
+
+			for (int i = lbz; i <= ph; i++)
+			{
+				ebpts[i] = XYZW(0.0, 0.0, 0.0, 0.0);
+				int mpi = std::min(degree, i);
+				for (int j = std::max(0, i - times); j <= mpi; j++)
+				{
+					ebpts[i] += bezalfs[i][j] * bpts[j];
+				}
+			}
+
+			if (oldr > 1)
+			{
+				int first = kind - 2;
+				int last = kind;
+				double den = ub - ua;
+				double bet = (ub - elevatedKnotVector[kind - 1]) / den;
+
+				for (int tr = 1; tr < oldr; tr++)
+				{
+					int i = first;
+					int j = last;
+					int kj = j - kind + 1;
+
+					while (j - i > tr)
+					{
+						if (i < cind)
+						{
+							double alf = (ub - elevatedKnotVector[i]) / (ua - elevatedKnotVector[i]);
+							elevatedControlPoints[i] = alf * elevatedControlPoints[i] + (1.0 - alf) * elevatedControlPoints[i - 1];
+						}
+
+						if (j >= lbz)
+						{
+							if (j - tr <= kind - ph + oldr)
+							{
+								double gam = (ub - elevatedKnotVector[j - tr]) / den;
+								ebpts[kj] = gam * ebpts[kj] + (1.0 - gam) * ebpts[kj + 1];
+							}
+							else
+							{
+								ebpts[kj] = bet * ebpts[kj] + (1.0 - bet) * ebpts[kj + 1];
+							}
+						}
+
+						i = i + 1;
+						j = j - 1;
+						kj = kj - 1;
+					}
+
+					first -= 1;
+					last += 1;
+				}
+			}
+
+			if (a != degree)
+			{
+				for (int i = 0; i < ph - oldr; i++)
+				{
+					elevatedKnotVector[kind++] = ua;
+				}
+			}
+
+			for (int j = lbz; j <= rbz; j++)
+			{
+				elevatedControlPoints[cind++] = ebpts[j];
+			}
+
+			if (b < m)
+			{
+				for (int j = 0; j < r; j++)
+				{
+					bpts[j] = nextbpts[j];
+				}
+				for (int j = r; j <= degree; j++)
+				{
+					bpts[j] = controlPoints[b - degree + j];
+				}
+
+				a = b;
+				b = b + 1;
+				ua = ub;
+			}
+			else
+			{
+				for (int i = 0; i <= ph; i++)
+				{
+					elevatedKnotVector[kind + i] = ub;
+				}
+			}
+		}
+	}
+
+	// Elevate the U degree of a surface by [times], column by column.
+	void JoinElevateSurfaceU(LN_NurbsSurface& surface, int times)
+	{
+		if (times <= 0)
+		{
+			return;
+		}
+		int rows = static_cast<int>(surface.ControlPoints.size());
+		int columns = static_cast<int>(surface.ControlPoints[0].size());
+
+		std::vector<double> elevatedKnotVector;
+		std::vector<std::vector<XYZW>> elevatedNet;
+		for (int j = 0; j < columns; ++j)
+		{
+			std::vector<XYZW> column(rows);
+			for (int i = 0; i < rows; ++i)
+			{
+				column[i] = surface.ControlPoints[i][j];
+			}
+			std::vector<double> columnKnots;
+			std::vector<XYZW> elevatedColumn;
+			JoinElevateCurveDegree(surface.DegreeU, surface.KnotVectorU, column, times, columnKnots, elevatedColumn);
+			if (j == 0)
+			{
+				elevatedKnotVector = columnKnots;
+				elevatedNet.assign(elevatedColumn.size(), std::vector<XYZW>(columns, XYZW(0.0, 0.0, 0.0, 0.0)));
+			}
+			for (size_t i = 0; i < elevatedColumn.size(); ++i)
+			{
+				elevatedNet[i][j] = elevatedColumn[i];
+			}
+		}
+		surface.DegreeU += times;
+		surface.KnotVectorU = elevatedKnotVector;
+		surface.ControlPoints = elevatedNet;
+	}
+
+	// Distinct interior knot values of one axis, in order.
+	std::vector<double> JoinInteriorKnots(const std::vector<double>& knotVector, int degree)
+	{
+		std::vector<double> interior;
+		for (size_t i = static_cast<size_t>(degree) + 1; i + degree + 1 < knotVector.size(); ++i)
+		{
+			double value = knotVector[i];
+			if (interior.empty() || interior.back() != value)
+			{
+				interior.push_back(value);
+			}
+		}
+		return interior;
+	}
+
+	// Union of two sorted distinct-knot lists. Only exactly equal double values are merged;
+	// nearby but distinct knots are kept as separate segment boundaries.
+	std::vector<double> JoinUnionKnots(const std::vector<double>& first, const std::vector<double>& second)
+	{
+		std::vector<double> result;
+		size_t i = 0;
+		size_t j = 0;
+		while (i < first.size() || j < second.size())
+		{
+			double value;
+			if (j >= second.size() || (i < first.size() && first[i] < second[j]))
+			{
+				value = first[i++];
+			}
+			else
+			{
+				value = second[j++];
+			}
+			if (result.empty() || result.back() != value)
+			{
+				result.push_back(value);
+			}
+		}
+		return result;
+	}
+
+	// Insert every common interior knot along V until its multiplicity reaches the surface
+	// V degree, so the surface becomes a sequence of Bezier patches on the common segments.
+	void JoinRefineVToBezier(LN_NurbsSurface& surface, const std::vector<double>& commonInteriorKnots)
+	{
+		for (size_t k = 0; k < commonInteriorKnots.size(); ++k)
+		{
+			LN_NurbsSurface updated;
+			LNLib::NurbsSurface::InsertKnot(surface, commonInteriorKnots[k], surface.DegreeV, false, updated);
+			surface = updated;
+		}
+	}
+
+	// Multiply a homogeneous tensor-product surface that is Bezier-form in V by a univariate
+	// scalar function, segment by segment, in the Bernstein basis:
+	// B_i^p(t) * B_j^q(t) = C(p,i)C(q,j)/C(p+q,i+j) * B_{i+j}^{p+q}(t).
+	// [net] has rows x (segments*degreeV+1) homogeneous control points;
+	// [scalarSegments] holds segments x (scalarDegree+1) positive Bernstein coefficients.
+	std::vector<std::vector<XYZW>> JoinMultiplyByScalarV(
+		const std::vector<std::vector<XYZW>>& net, int degreeV,
+		const std::vector<std::vector<double>>& scalarSegments, int scalarDegree, int segments)
+	{
+		int productDegree = degreeV + scalarDegree;
+		int rows = static_cast<int>(net.size());
+		int productColumns = segments * productDegree + 1;
+		std::vector<std::vector<XYZW>> product(rows, std::vector<XYZW>(productColumns, XYZW(0.0, 0.0, 0.0, 0.0)));
+		for (int i = 0; i < rows; ++i)
+		{
+			for (int s = 0; s < segments; ++s)
+			{
+				for (int m = 0; m <= productDegree; ++m)
+				{
+					XYZW accumulated(0.0, 0.0, 0.0, 0.0);
+					int jLo = std::max(0, m - scalarDegree);
+					int jHi = std::min(degreeV, m);
+					for (int j = jLo; j <= jHi; ++j)
+					{
+						int k = m - j;
+						double factor = LNLib::MathUtils::Binomial(degreeV, j) * LNLib::MathUtils::Binomial(scalarDegree, k) / LNLib::MathUtils::Binomial(productDegree, m);
+						accumulated += net[i][s * degreeV + j] * (factor * scalarSegments[s][k]);
+					}
+					product[i][s * productDegree + m] = accumulated;
+				}
+			}
+		}
+		return product;
+	}
+}
+
+bool LNLib::NurbsSurface::JoinAlongU(const LN_NurbsSurface& left, const LN_NurbsSurface& right, bool reverseRightV, double tolerance, LN_NurbsSurface& result)
+{
+	VALIDATE_ARGUMENT(std::isfinite(tolerance) && tolerance > 0.0, "tolerance", "Tolerance must be a positive finite number.");
+	JoinValidateSurface(left);
+	JoinValidateSurface(right);
+
+	// Gauge normalization, parameter normalization to [0,1]x[0,1], optional V reversal.
+	LN_NurbsSurface normalizedLeft = JoinNormalize(left, false);
+	LN_NurbsSurface normalizedRight = JoinNormalize(right, reverseRightV);
+
+	// Common U degree; original U interior knots keep their multiplicities after elevation.
+	int degreeU = std::max(normalizedLeft.DegreeU, normalizedRight.DegreeU);
+	JoinElevateSurfaceU(normalizedLeft, degreeU - normalizedLeft.DegreeU);
+	JoinElevateSurfaceU(normalizedRight, degreeU - normalizedRight.DegreeU);
+
+	// Common V segmentation: union of both interior knot lists on the normalized domains.
+	std::vector<double> interiorV = JoinUnionKnots(
+		JoinInteriorKnots(normalizedLeft.KnotVectorV, normalizedLeft.DegreeV),
+		JoinInteriorKnots(normalizedRight.KnotVectorV, normalizedRight.DegreeV));
+	int segments = static_cast<int>(interiorV.size()) + 1;
+	int degreeVLeft = normalizedLeft.DegreeV;
+	int degreeVRight = normalizedRight.DegreeV;
+	int degreeV = degreeVLeft + degreeVRight;
+
+	// Bezier-form basis conversion along V on the common segments.
+	JoinRefineVToBezier(normalizedLeft, interiorV);
+	JoinRefineVToBezier(normalizedRight, interiorV);
+
+	// Seam weight functions wL(v) and wR(v) as per-segment Bernstein coefficients, taken
+	// from the W components of the two boundary rows after the basis conversion.
+	std::vector<std::vector<double>> weightLeft(segments, std::vector<double>(degreeVLeft + 1));
+	const std::vector<XYZW>& seamRowLeft = normalizedLeft.ControlPoints.back();
+	for (int s = 0; s < segments; ++s)
+	{
+		for (int j = 0; j <= degreeVLeft; ++j)
+		{
+			weightLeft[s][j] = seamRowLeft[s * degreeVLeft + j].GetW();
+		}
+	}
+	std::vector<std::vector<double>> weightRight(segments, std::vector<double>(degreeVRight + 1));
+	const std::vector<XYZW>& seamRowRight = normalizedRight.ControlPoints.front();
+	for (int s = 0; s < segments; ++s)
+	{
+		for (int j = 0; j <= degreeVRight; ++j)
+		{
+			weightRight[s][j] = seamRowRight[s * degreeVRight + j].GetW();
+		}
+	}
+
+	// Common denominator: the whole left homogeneous surface is multiplied by wR(v),
+	// the whole right one by wL(v). Euclidean geometry of both sides is unchanged.
+	std::vector<std::vector<XYZW>> productLeft = JoinMultiplyByScalarV(normalizedLeft.ControlPoints, degreeVLeft, weightRight, degreeVRight, segments);
+	std::vector<std::vector<XYZW>> productRight = JoinMultiplyByScalarV(normalizedRight.ControlPoints, degreeVRight, weightLeft, degreeVLeft, segments);
+
+	// Compatibility: the two boundary curves, now sharing one denominator and one
+	// Bernstein basis per segment, must agree coefficient by coefficient in all four
+	// homogeneous components.
+	const std::vector<XYZW>& boundaryLeft = productLeft.back();
+	const std::vector<XYZW>& boundaryRight = productRight.front();
+	for (size_t j = 0; j < boundaryLeft.size(); ++j)
+	{
+		for (int c = 0; c < 4; ++c)
+		{
+			double a = boundaryLeft[j][c];
+			double b = boundaryRight[j][c];
+			double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
+			if (std::abs(a - b) > tolerance * scale)
+			{
+				return false;
+			}
+		}
+	}
+
+	LN_NurbsSurface joined;
+	joined.DegreeU = degreeU;
+	joined.DegreeV = degreeV;
+
+	// U knots: left interior knots on [0,1], the seam knot 1 with multiplicity exactly
+	// degreeU, right interior knots shifted to [1,2].
+	const std::vector<double>& knotsULeft = normalizedLeft.KnotVectorU;
+	const std::vector<double>& knotsURight = normalizedRight.KnotVectorU;
+	joined.KnotVectorU.assign(knotsULeft.begin(), knotsULeft.end() - 1);
+	for (size_t i = static_cast<size_t>(degreeU) + 1; i < knotsURight.size(); ++i)
+	{
+		joined.KnotVectorU.push_back(knotsURight[i] + 1.0);
+	}
+
+	// V knots: Bezier form of degree degreeVLeft+degreeVRight on the common segments.
+	joined.KnotVectorV.reserve(2 * (degreeV + 1) + interiorV.size() * degreeV);
+	for (int i = 0; i <= degreeV; ++i)
+	{
+		joined.KnotVectorV.push_back(0.0);
+	}
+	for (size_t k = 0; k < interiorV.size(); ++k)
+	{
+		for (int i = 0; i < degreeV; ++i)
+		{
+			joined.KnotVectorV.push_back(interiorV[k]);
+		}
+	}
+	for (int i = 0; i <= degreeV; ++i)
+	{
+		joined.KnotVectorV.push_back(1.0);
+	}
+
+	// Control net: exactly one shared seam row, taken from the left coefficients.
+	joined.ControlPoints = productLeft;
+	joined.ControlPoints.insert(joined.ControlPoints.end(), productRight.begin() + 1, productRight.end());
+
+	result = joined;
+	return true;
 }
 
 bool LNLib::NurbsSurface::GetUVTangent(const LN_NurbsSurface& surface, const UV param, const XYZ& tangent, UV& uvTangent)

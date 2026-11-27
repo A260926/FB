@@ -1,0 +1,6 @@
+/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/.build/offline/CMakeFiles/lnlib_offline.dir
+/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/.build/offline/CMakeFiles/baseline.dir
+/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/.build/offline/CMakeFiles/join_contracts.dir
+/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/.build/offline/CMakeFiles/join_example.dir
+/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/.build/offline/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/.build/offline/CMakeFiles/rebuild_cache.dir

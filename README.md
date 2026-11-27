@@ -35,6 +35,30 @@ Additional Algorithms:
 |***NURBS Surface***  | Surface AABB and OBB BoundingBox</br>Surface Curvature and Normal</br>Surface Approximate Area</br> Surface Triangulation |
 |***NURBS Volume***  | Volume Degree Elevation</br>Volume Knot Insertion/Refinement</br>Volume Point Inversion</br>Volume Split</br>Extract Surface From Volume</br>Extract IsoCurve From Volume</br>Volume Swap and Reverse|
 
+## Joining Two Surfaces Along U
+`NurbsSurface::JoinAlongU(left, right, reverseRightV, tolerance, result)` stitches the maximum-U boundary of `left` to the minimum-U boundary of `right` into one genuine `LN_NurbsSurface` (its own rectangular homogeneous control net and knot vectors, so the standard point/derivative evaluators work on it directly, and editing of the control net can continue afterwards).
+
+* Both input parameter rectangles are normalized to `[0,1]x[0,1]`; with `reverseRightV = true` the V direction of `right` is flipped first. The result spans `[0,2]x[0,1]`: `u` in `[0,1]` maps to the normalized left domain, `u` in `[1,2]` to the normalized right domain.
+* The two sides may use **different rational weight functions** along the shared seam. The join is computed on a common-denominator representation (the left sheet is multiplied by the right seam weight function and vice versa), so only the Euclidean seam curve has to coincide — the homogeneous boundary control points do not need to be proportional.
+* Output degrees: `degreeU = max(degreeU_left, degreeU_right)` with original U interior knots kept at their elevated multiplicities and the seam knot `u = 1` at multiplicity exactly `degreeU` (C0); `degreeV = degreeV_left + degreeV_right` stored as piecewise Bernstein segments on the union of both V knot lists.
+* **Return value vs. exception:** the function returns `false` when both inputs are valid but the two seams do not represent the same space curve within `tolerance` (every Bernstein coefficient of every seam segment is compared in all four homogeneous components). It throws `std::invalid_argument` when an input is malformed (non-rectangular net, knot/control count mismatch, non-finite knots or coordinates, non-positive weights, unclamped knot vectors, interior multiplicity above the degree, non-positive domain width) or when `tolerance` is not a positive finite number. In both failure modes `result` is left untouched. On success `result` may alias either input; the other input is never modified.
+
+```C++
+LNLib::LN_NurbsSurface joined;
+if (LNLib::NurbsSurface::JoinAlongU(left, right, false, 1e-10, joined))
+{
+    XYZ p = LNLib::NurbsSurface::GetPointOnSurface(joined, LNLib::UV(1.5, 0.25));
+}
+```
+
+A runnable example that joins two non-planar rational patches and writes the joined surface as an OBJ mesh lives in [examples/join_surface.cpp](examples/join_surface.cpp). The offline build chain compiles the library, the contract tests and the example without network access:
+
+```shell
+bash support/run.sh baseline   # sanity-check the original library
+bash support/run.sh target     # + join contract tests (basis/rational/ownership) and the example
+.build/offline/join_example out.obj
+```
+
 ## Visualization
 <img src="assets/curve.png" width=500 height=400>
 

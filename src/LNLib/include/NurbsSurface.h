@@ -141,6 +141,24 @@ namespace LNLib
 		static void Reparametrize(const LN_NurbsSurface& surface, double minU, double maxU, double minV, double maxV, LN_NurbsSurface& result);
 
 		/// <summary>
+		/// Join two clamped NURBS surfaces along the U direction.
+		/// The maximum-U boundary of [left] is stitched to the minimum-U boundary of [right]
+		/// (the V direction of [right] is reversed first when [reverseRightV] is true).
+		/// Both input parameter rectangles are normalized to [0,1]x[0,1]; the result spans
+		/// [0,2]x[0,1] where u in [0,1] maps to the normalized left domain and u in [1,2]
+		/// maps to the normalized right domain.
+		/// The two sides may use different rational weight functions along the shared seam:
+		/// the join is performed on a common-denominator representation, so only the
+		/// Euclidean seam curve has to coincide, not the homogeneous boundary control points.
+		/// Returns true on success; [result] then owns an independent rectangular control net
+		/// and its own knot vectors. Returns false (leaving [result] untouched) when the two
+		/// seams are valid but do not represent the same space curve within [tolerance].
+		/// Throws std::invalid_argument for malformed inputs or a non-positive/NaN tolerance
+		/// (also leaving [result] untouched).
+		/// </summary>
+		static bool JoinAlongU(const LN_NurbsSurface& left, const LN_NurbsSurface& right, bool reverseRightV, double tolerance, LN_NurbsSurface& result);
+
+		/// <summary>
 		/// The NURBS Book 2nd Edition Page235
 		/// Surface Tangent Vector Inversion: finding the corresponding UV tangent [du dv] make T = Su*du+Sv*dv.
 		/// </summary>

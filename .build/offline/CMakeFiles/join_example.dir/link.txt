@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/join_example.dir/Volumes/UserFBWorkspace/questions/FSC3A93D7F900EU16815/attempts/20261127T192040551310Z/repo/examples/join_surface.cpp.o -o join_example  liblnlib_offline.a

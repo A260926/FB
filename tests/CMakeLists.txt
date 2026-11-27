@@ -33,5 +33,6 @@ set_target_properties(
 )
 
 target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src/LNLib/include)
+target_include_directories(${TARGET_NAME} PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(${TARGET_NAME} LNLib gtest gtest_main)
 add_dependencies(${TARGET_NAME} LNLib)
