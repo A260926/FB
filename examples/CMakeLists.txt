@@ -21,3 +21,10 @@ foreach(example ${examples})
     target_link_libraries(${example} OTIO::opentimelineio ${PYTHON_LIBRARIES})
     set_target_properties(${example} PROPERTIES FOLDER examples)
 endforeach()
+
+# The ripple delete example only uses the C++ API, so it does not need Python.
+add_executable(ripple_delete ripple_delete.cpp)
+target_link_libraries(ripple_delete OTIO::opentimelineio)
+target_include_directories(ripple_delete PRIVATE
+    "${PROJECT_SOURCE_DIR}/src" "${PROJECT_BINARY_DIR}/src")
+set_target_properties(ripple_delete PROPERTIES FOLDER examples)

@@ -1,0 +1,16 @@
+{
+	"InstallScripts" : 
+	[
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/deps/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/deps/Imath/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/deps/Imath/config/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/deps/Imath/src/Imath/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/deps/minizip-ng/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/opentime/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/src/opentimelineio/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/examples/cmake_install.cmake",
+		"/Volumes/UserFBWorkspace/questions/FS5963D6D5F777U16842/attempts/20261127T161606663927Z/repo/.build/support/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
