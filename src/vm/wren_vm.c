@@ -21,6 +21,15 @@
   #include <stdio.h>
 #endif
 
+#ifdef WREN_FUZZ_TESTING
+// Read-only fuzz instrumentation. Defined here so there is exactly one
+// definition; the fuzz driver and wrenEnsureStack() reference them as extern.
+// They accumulate counts only and never alter interpreter behavior.
+int wren_fuzz_stack_moves = 0;
+int wren_fuzz_open_upvalue_moves = 0;
+int wren_fuzz_gc_count = 0;
+#endif
+
 // The behavior of realloc() when the size is 0 is implementation defined. It
 // may return a non-NULL pointer which must not be dereferenced but nevertheless
 // should be freed. To prevent that, we avoid calling realloc() with a zero
@@ -124,6 +133,9 @@ void wrenFreeVM(WrenVM* vm)
 
 void wrenCollectGarbage(WrenVM* vm)
 {
+#ifdef WREN_FUZZ_TESTING
+  wren_fuzz_gc_count++;
+#endif
 #if WREN_DEBUG_TRACE_MEMORY || WREN_DEBUG_TRACE_GC
   printf("-- gc --\n");
 
@@ -262,7 +274,9 @@ static ObjUpvalue* captureUpvalue(WrenVM* vm, ObjFiber* fiber, Value* local)
   }
 
   // Found an existing upvalue for this local.
+  /* >FUZZ-REUSE-FIX-START */
   if (upvalue != NULL && upvalue->value == local) return upvalue;
+  /* >FUZZ-REUSE-FIX-END */
 
   // We've walked past this local on the stack, so there must not be an
   // upvalue for it already. Make a new one and link it in in the right

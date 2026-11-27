@@ -190,15 +190,21 @@ ObjFiber* wrenNewFiber(WrenVM* vm, ObjClosure* closure)
 void wrenEnsureStack(WrenVM* vm, ObjFiber* fiber, int needed)
 {
   if (fiber->stackCapacity >= needed) return;
-  
+
   int capacity = wrenPowerOf2Ceil(needed);
-  
+
   Value* oldStack = fiber->stack;
+#ifdef WREN_FUZZ_TESTING
+  // Read-only test instrumentation: record whether an open upvalue exists at
+  // the moment a stack grow is requested. These counters never influence
+  // interpreter behavior and are only compiled into fuzz test builds.
+  int fuzzHadOpenUpvalues = fiber->openUpvalues != NULL;
+#endif
   fiber->stack = (Value*)wrenReallocate(vm, fiber->stack,
                                         sizeof(Value) * fiber->stackCapacity,
                                         sizeof(Value) * capacity);
   fiber->stackCapacity = capacity;
-  
+
   // If the reallocation moves the stack, then we need to recalculate every
   // pointer that points into the old stack to into the same relative distance
   // in the new stack. We have to be a little careful about how these are
@@ -206,6 +212,12 @@ void wrenEnsureStack(WrenVM* vm, ObjFiber* fiber, int needed)
   // single array, hence the slightly redundant-looking arithmetic below.
   if (fiber->stack != oldStack)
   {
+#ifdef WREN_FUZZ_TESTING
+    extern int wren_fuzz_stack_moves;
+    extern int wren_fuzz_open_upvalue_moves;
+    wren_fuzz_stack_moves++;
+    if (fuzzHadOpenUpvalues) wren_fuzz_open_upvalue_moves++;
+#endif
     // Top of the stack.
     if (vm->apiStack >= oldStack && vm->apiStack <= fiber->stackTop)
     {
@@ -220,12 +232,14 @@ void wrenEnsureStack(WrenVM* vm, ObjFiber* fiber, int needed)
     }
     
     // Open upvalues.
+    /* >FUZZ-MOVE-FIX-START */
     for (ObjUpvalue* upvalue = fiber->openUpvalues;
          upvalue != NULL;
          upvalue = upvalue->next)
     {
       upvalue->value = fiber->stack + (upvalue->value - oldStack);
     }
+    /* >FUZZ-MOVE-FIX-END */
     
     fiber->stackTop = fiber->stack + (fiber->stackTop - oldStack);
   }
