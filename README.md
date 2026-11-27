@@ -7,7 +7,7 @@ This is a Golang library to manipulate subtitles.
 
 It allows you to manipulate `srt`, `stl`, `ttml`, `ssa/ass`, `webvtt` and `teletext` files for now.
 
-Available operations are `parsing`, `writing`, `applying linear correction`, `syncing`, `fragmenting`, `unfragmenting`, `merging` and `optimizing`.
+Available operations are `parsing`, `writing`, `applying linear correction`, `syncing`, `fragmenting`, `unfragmenting`, `merging`, `assembling` and `optimizing`.
 
 # Installation
 
@@ -37,6 +37,13 @@ s1.Fragment(2*time.Second)
 // Merge subtitles
 s1.Merge(s2)
 
+// Assemble an edit list of clips into a new timeline
+s3, _ := astisub.Assemble([]astisub.EditClip{
+	{Source: s1, In: 3*time.Second, Out: 6*time.Second, Duration: 6*time.Second},
+	{Source: s2, In: 0, Out: 2*time.Second, Duration: time.Second},
+})
+s3.Write("/path/to/assembled.vtt")
+
 // Optimize subtitles
 s1.Optimize()
 
@@ -59,6 +66,17 @@ If **astisub** has been installed properly you can:
 - convert any type of subtitle to any other type of subtitle:
 
         astisub convert -i example.srt -o example.ttml
+
+- assemble an edit list of subtitle clips into a new timeline:
+
+        astisub assemble -i clips.json -o example.out.vtt
+
+  with `clips.json` a JSON array of clips whose times use Go duration syntax and whose sources are resolved relative to the manifest:
+
+        [
+          {"source": "example.srt", "in": "3s", "out": "6s", "duration": "6s"},
+          {"source": "example.ttml", "in": "0s", "out": "2s", "duration": "1s"}
+        ]
 
 - apply linear correction to any type of subtitle:
 
@@ -91,6 +109,7 @@ If **astisub** has been installed properly you can:
 - [x] syncing
 - [x] fragmenting/unfragmenting
 - [x] merging
+- [x] assembling
 - [x] ordering
 - [x] optimizing
 - [x] linear correction

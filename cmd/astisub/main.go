@@ -1,8 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"path/filepath"
+	"time"
 
 	"github.com/asticode/go-astikit"
 	"github.com/asticode/go-astisub"
@@ -35,6 +40,14 @@ func main() {
 	// Validate output path
 	if len(*outputPath) <= 0 {
 		log.Fatal("Use -o to provide an output path")
+	}
+
+	// The assemble subcommand reads an edit list manifest instead of subtitles
+	if cmd == "assemble" {
+		if err := assemble((*inputPath.Slice)[0], *outputPath); err != nil {
+			log.Fatal(err)
+		}
+		return
 	}
 
 	// Open first input path
@@ -137,4 +150,84 @@ func main() {
 	default:
 		log.Fatalf("Invalid subcommand %s", cmd)
 	}
+}
+
+// assembleManifestEntry represents one entry of an assemble manifest
+type assembleManifestEntry struct {
+	Source   string `json:"source"`
+	In       string `json:"in"`
+	Out      string `json:"out"`
+	Duration string `json:"duration"`
+}
+
+// assemble reads an edit list manifest, assembles its clips and writes the
+// result. The manifest is a JSON array of entries with source, in, out and
+// duration string fields; times use Go duration syntax and sources are
+// resolved relative to the manifest's directory. The whole manifest is read
+// and assembled before the output is opened, so a bad manifest cannot
+// truncate an existing file.
+func assemble(manifestPath, outputPath string) (err error) {
+	// Read the whole manifest
+	var b []byte
+	if b, err = ioutil.ReadFile(manifestPath); err != nil {
+		err = fmt.Errorf("reading manifest %s failed: %w", manifestPath, err)
+		return
+	}
+	var entries []assembleManifestEntry
+	if err = json.Unmarshal(b, &entries); err != nil {
+		err = fmt.Errorf("parsing manifest %s failed: %w", manifestPath, err)
+		return
+	}
+
+	// Build clips, loading each canonical source path only once so it keeps a
+	// single source identity
+	var clips []astisub.EditClip
+	var sources = make(map[string]*astisub.Subtitles)
+	var manifestDir = filepath.Dir(manifestPath)
+	for i, e := range entries {
+		var in, out, duration time.Duration
+		if in, err = time.ParseDuration(e.In); err != nil {
+			err = fmt.Errorf("parsing in of manifest entry %d failed: %w", i, err)
+			return
+		}
+		if out, err = time.ParseDuration(e.Out); err != nil {
+			err = fmt.Errorf("parsing out of manifest entry %d failed: %w", i, err)
+			return
+		}
+		if duration, err = time.ParseDuration(e.Duration); err != nil {
+			err = fmt.Errorf("parsing duration of manifest entry %d failed: %w", i, err)
+			return
+		}
+		var sourcePath = e.Source
+		if !filepath.IsAbs(sourcePath) {
+			sourcePath = filepath.Join(manifestDir, sourcePath)
+		}
+		if sourcePath, err = filepath.Abs(sourcePath); err != nil {
+			err = fmt.Errorf("resolving source of manifest entry %d failed: %w", i, err)
+			return
+		}
+		source, ok := sources[sourcePath]
+		if !ok {
+			if source, err = astisub.OpenFile(sourcePath); err != nil {
+				err = fmt.Errorf("opening source of manifest entry %d failed: %w", i, err)
+				return
+			}
+			sources[sourcePath] = source
+		}
+		clips = append(clips, astisub.EditClip{Source: source, In: in, Out: out, Duration: duration})
+	}
+
+	// Assemble before opening the output
+	var sub *astisub.Subtitles
+	if sub, err = astisub.Assemble(clips); err != nil {
+		err = fmt.Errorf("assembling failed: %w", err)
+		return
+	}
+
+	// Write
+	if err = sub.Write(outputPath); err != nil {
+		err = fmt.Errorf("writing to %s failed: %w", outputPath, err)
+		return
+	}
+	return
 }
