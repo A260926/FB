@@ -81,3 +81,59 @@ The library contains several examples that are kept up-to-date with the API:
 - A [benchmarking utility](test/benchmark.cpp) that showcases what the library can do.
 - A [serialization test](test/serialize.cpp) that shows how to save and load a BVH from a file.
 - A [C API example](test/c_api_example.c) that shows how to use the C bindings to this library.
+- A [spatial SAH example](test/spatial_sah_example.cpp) that builds and queries a triangle BVH
+  produced by the spatial split builder.
+
+## Spatial SAH builder
+
+`bvh::v2::SpatialSahBuilder<Node, BinCount = 16>` (see
+[`src/bvh/v2/spatial_sah_builder.h`](src/bvh/v2/spatial_sah_builder.h)) is a triangle-only,
+top-down SAH builder that supports *spatial splits* in addition to regular object splits. It only
+accepts three-dimensional `Node<float, 3>` or `Node<double, 3>`. The existing
+`BinnedSahBuilder`, `SweepSahBuilder`, and `DefaultBuilder` are unchanged and remain available.
+
+Long, diagonal triangles make the leaf boxes of an object-only BVH large, so rays that miss the
+surface still visit and test many triangles. A spatial split does not assign such a triangle to a
+single child: instead it clips the triangle's current fragment against the splitting plane and
+stores a tighter spatial reference on each side. Several references can therefore cover the same
+original triangle.
+
+### Reference slots versus original face ids
+
+This is the key distinction when using the produced tree:
+
+- A **reference slot** is one entry in `bvh.prim_ids`, one entry in the result's
+  `reference_bounds` / `reference_cells` arrays, and the primitive tested inside a leaf.
+- The value stored in a slot is the **original face id**: an index into the
+  `std::span<const Tri>` passed to `build`. The same id may appear in several slots because a
+  triangle was spatially duplicated.
+
+The original triangles are never split, copied, or renumbered: material, UVs, and the original
+face id are unchanged. During traversal you read the caller's original triangle through
+`bvh.prim_ids[slot]` (indirect layout), or you can prebuild one `PrecomputedTri` per reference
+slot, in which case that reordered array has length equal to the number of references. Because
+the same face can be tested more than once, nearest-hit keeps the original face id, distance, and
+barycentric coordinates; no mailboxing or ordered multi-hit is required.
+
+`reference_bounds[slot]` is the tight bounding box of that clipped fragment, while
+`reference_cells[slot]` is the closed spatial region it occupies (the intersection of all
+ancestor clipping half-spaces). Both arrays are ordered by the slots in `bvh.prim_ids`; at the
+root the cell is simply the original triangle box. Fragment boxes are expanded by at most
+`32 * epsilon * max(1, max|input coordinate|)` per side for conservative coverage.
+
+### Budget and its scope
+
+`Config` extends `TopDownSahBuilder<Node>::Config` (`sah`, `min_leaf_size`, `max_leaf_size`) with:
+
+- `max_extra_references` (default `0`): the maximum number of references the *whole tree* may
+  contain in addition to the input faces. With the default of `0` the builder never duplicates a
+  triangle.
+
+The budget is a single, tree-wide allowance. Candidate object and spatial splits are evaluated
+for free at every node; the allowance is only debited when a spatial split is actually
+committed, by the number of references it duplicates. When the budget is exhausted the builder
+keeps making object splits, so every input face remains represented and the build never returns
+a partial tree. Each call to `build` starts with a fresh budget; builds do not share state and
+are deterministic. If the total reference count or a node index cannot be represented by
+`Node::Index`, the builder throws `std::length_error` rather than truncating. An empty input
+returns an empty tree and empty reference arrays.

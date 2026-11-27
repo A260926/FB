@@ -17,6 +17,11 @@ target_link_libraries(serialize PUBLIC bvh)
 set_target_properties(serialize PROPERTIES CXX_STANDARD 20)
 add_test(NAME serialize COMMAND serialize)
 
+add_executable(spatial_sah_example spatial_sah_example.cpp)
+target_link_libraries(spatial_sah_example PUBLIC bvh)
+set_target_properties(spatial_sah_example PROPERTIES CXX_STANDARD 20)
+add_test(NAME spatial_sah_example COMMAND spatial_sah_example)
+
 add_executable(benchmark benchmark.cpp load_obj.cpp)
 target_link_libraries(benchmark PUBLIC bvh)
 set_target_properties(benchmark PROPERTIES CXX_STANDARD 20)
