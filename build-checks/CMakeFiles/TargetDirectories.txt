@@ -1,0 +1,7 @@
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/mimalloc-static.dir
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/rebuild_cache.dir
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/list_install_components.dir
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/install.dir
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/install/local.dir
+/Volumes/UserFBWorkspace/questions/FSC11299FAC6F7U6071/attempts/20261127T160723300641Z/repo/build-checks/CMakeFiles/install/strip.dir

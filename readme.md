@@ -507,6 +507,52 @@ many system calls. Therefore, there are various environment variables (and optio
   aligned allocations to be un-aligned so use with care.
 -->
 
+### Guard direction
+
+By default a guard page is placed right _behind_ a sampled object (`MI_GUARD_AFTER`), which catches
+forward (tail) overflows. The direction can be selected per thread-local heap so a guard page is
+placed immediately _before_ the first user byte, catching forward underflows like `p[-1]`:
+
+```c
+typedef enum mi_guard_direction_e {
+  MI_GUARD_AFTER  = 0,    // guard page behind the object (default)
+  MI_GUARD_BEFORE = 1     // guard page in front of the object
+} mi_guard_direction_t;
+
+void mi_theap_guarded_set_direction(mi_theap_t* theap, mi_guard_direction_t direction);
+```
+
+New theaps default to `MI_GUARD_AFTER` to preserve the existing behavior. The setting only affects
+objects that the existing sampler selects _afterwards_: it does not change the sample countdown,
+the size bounds, or the random sequence, and it never touches already allocated objects. Each object
+records its own direction, so freeing it always removes the correct page, regardless of the freeing
+thread's current configuration, including cross-thread frees, frees after the owning thread exited,
+and batch `mi_heap_destroy` cleanup. Both directions can be alive in the same page or heap at the
+same time, and recycled blocks never retain a stale guard page. An invalid enum value is reported
+through the error channel and leaves the direction unchanged. When the library is built without
+`MI_GUARDED`, the call still links but the setting is safely ignored.
+
+With `MI_GUARD_BEFORE` the os-page-aligned block is laid out as
+`[header page][guard page][user bytes ...]`: the header stays readable and holds the allocation
+tag, while the user pointer is the first byte after the inaccessible OS page, so both `p[-1]`
+reads and writes raise `SIGSEGV`/`SIGBUS`. The usual minimum alignment is still satisfied and
+`mi_usable_size` never counts the guard (or header) page. If the protection cannot be established
+(for example pinned/huge OS pages that cannot be protected) the allocation fails and reports an
+error instead of returning writable memory advertised as guarded.
+
+Limitations:
+
+- Only ordinary system pages are used; the pinned/huge-page arena is not extended. Objects placed in
+  such memory cannot be guarded in front and fail rather than silently losing protection.
+- `mi_malloc_aligned`/`mi_malloc_aligned_at` keep their address, content and usable-size contracts but
+  are not required to sit tight against the front guard page: they may be offset inside the
+  front-guard block while still locating and freeing the underlying block correctly.
+- Each front-guard object reserves two extra OS pages (header and guard), so very small objects cost
+  at least that much address space when sampled, just as tail guards already reserve an extra page.
+- Reallocation keeps the old direction when it can stay in place; if it relocates, the new object
+  follows the receiving theap's current direction. A failed realloc preserves the original object
+  and its protection, and `mi_rezalloc` keeps its extension-zeroing rule.
+
 # Overriding Standard Malloc
 
 Overriding the standard `malloc` (and `new`) can be done either _dynamically_ or _statically_.

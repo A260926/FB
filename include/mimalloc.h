@@ -418,6 +418,19 @@ mi_decl_nodiscard mi_decl_export                  void* mi_theap_rezalloc(mi_the
 mi_decl_export void mi_theap_guarded_set_sample_rate(mi_theap_t* theap, size_t sample_rate, size_t seed);
 mi_decl_export void mi_theap_guarded_set_size_bound(mi_theap_t* theap, size_t min, size_t max);
 
+// Direction of the guard page of a sampled guarded object (only effective with MI_GUARDED enabled).
+typedef enum mi_guard_direction_e {
+  MI_GUARD_AFTER  = 0,    // guard page right behind the object (default; catches forward overflows)
+  MI_GUARD_BEFORE = 1     // guard page immediately before the first user byte (catches underflows like p[-1])
+} mi_guard_direction_t;
+
+// Select the guard page direction for guarded objects later sampled by this theap.
+// New theaps default to `MI_GUARD_AFTER`. The setting does not change the sample countdown,
+// the size bounds, or the random sequence, and does not affect already allocated objects.
+// An invalid direction is reported through the error channel and the current direction is left unchanged.
+// When built without MI_GUARDED, the call still links but the setting is safely ignored.
+mi_decl_export void mi_theap_guarded_set_direction(mi_theap_t* theap, mi_guard_direction_t direction);
+
 // very experimental
 typedef bool (mi_cdecl mi_commit_fun_t)(bool commit, void* start, size_t size, bool* is_zero, void* user_arg);
 mi_decl_export bool  mi_manage_memory(void* start, size_t size, bool is_committed, bool is_pinned, bool is_zero, int numa_node, bool exclusive,
