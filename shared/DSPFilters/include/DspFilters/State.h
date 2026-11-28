@@ -137,6 +137,14 @@ public:
     return static_cast<Sample> (out);
   }
 
+  // Explicit access to the two delay elements. These are provided so that
+  // callers which must remember, restore, or replay the realized recursion
+  // (for example offline gradient/adjoint processing) can checkpoint the
+  // production Direct Form II state without re-implementing the filter.
+  double getV1 () const { return m_v1; }
+  double getV2 () const { return m_v2; }
+  void setV1V2 (double v1, double v2) { m_v1 = v1; m_v2 = v2; }
+
 private:
   double m_v1; // v[-1]
   double m_v2; // v[-2]
