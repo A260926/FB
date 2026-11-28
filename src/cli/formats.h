@@ -231,6 +231,23 @@ BUILD_EXTERN enum FileCheck filecheck_tta_seektable(
 
 /* ------------------------------------------------------------------------ */
 
+/* tta_seek_loc.c */
+
+#undef st
+#undef loc
+BUILD_EXTERN enum FileCheck seektable_span_locate(
+	/*@out@*/ off_t *RESTRICT, /*@out@*/ size_t *RESTRICT,
+	const struct SeekTable *RESTRICT, size_t, size_t, off_t
+)
+/*@globals	internalState@*/
+/*@modifies	internalState,
+		*start_off,
+		*first_nbytes
+@*/
+;
+
+/* ------------------------------------------------------------------------ */
+
 /* tta_write.c */
 
 #undef outfile

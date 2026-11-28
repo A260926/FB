@@ -23,6 +23,7 @@
 #include "../main.h"
 #include "../open.h"
 #include "../opts.h"
+#include "../sample_range.h"
 #include "../system.h"
 
 /* //////////////////////////////////////////////////////////////////////// */
@@ -238,6 +239,13 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	}
 	fstat->endian = xENDIAN_LITTLE;	/* wav/w64 only LE */
 
+	/* sample range is interpreted per input against this file */
+	if ( g_flag.use_sample_range ){
+		sample_range_validate(
+			&g_flag.sample_range, fstat->nsamples_enc, infile_name
+		);
+	}
+
 	/* pre-decode stats */
 	if ( ! g_flag.quiet ){
 		errprint_stats_precodec(
@@ -255,6 +263,12 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 	result.fc = filecheck_tta_seektable(&seektable, tmp.z, infile);
 	if UNLIKELY ( result.fc != FILECHECK_OK ){
 		if ( result.fc == FILECHECK_CORRUPTED ){
+			/* a sample range needs a trustworthy seektable; fail
+			 * before writing any output
+			*/
+			if ( g_flag.use_sample_range ){
+				error_tta("%s: corrupted seektable", infile_name);
+			}
 			ignore_seektable = true;
 			warning_tta("%s: corrupted seektable", infile_name);
 		}
@@ -263,6 +277,34 @@ dec_loop(struct OpenedFilesMember *const RESTRICT ofm)
 		}
 	}
 	/* MAYBE: check that the seektable entries match the filesize */
+
+	/* in range mode the offset of the first compressed frame is fixed */
+	if ( g_flag.use_sample_range ){
+		seektable.off = ftello(infile);
+		if UNLIKELY ( seektable.off < 0 ){
+			error_sys(errno, "ftello", infile_name);
+		}
+	}
+
+	/* range mode: validate frame selection/location before opening output */
+	if ( g_flag.use_sample_range ){
+		struct FrameSpan span;
+		off_t  start_off;
+		size_t first_nbytes;
+
+		sample_range_span(
+			&span, &g_flag.sample_range, fstat->framelen,
+			seektable.nmemb
+		);
+		result.fc = seektable_span_locate(
+			&start_off, &first_nbytes, &seektable, span.first,
+			span.nmemb, seektable.off
+		);
+		if UNLIKELY ( result.fc != FILECHECK_OK ){
+			error_filecheck(result.fc, errno, fstat, infile_name);
+			exit(result.fc);
+		}
+	}
 
 	/* open outfile */
 	outfile = fopen_check(outfile_name, "wb", FATAL);
@@ -321,7 +363,8 @@ decode_multi:
 	}
 
 	if UNLIKELY (
-		(! ignore_seektable) && (dstat.nframes != seektable.nmemb)
+		(! ignore_seektable) && (! g_flag.use_sample_range)
+		&& (dstat.nframes != seektable.nmemb)
 	){
 		warning_tta("%s: truncated file / malformed seektable",
 			infile_name

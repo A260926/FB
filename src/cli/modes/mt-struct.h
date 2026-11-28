@@ -178,6 +178,9 @@ struct MTArg_DecIO {
 	const struct SeekTable 		*seektable;
 	/*@temp@*/
 	struct DecStats			*dstat_out;
+	/* full file stats: sample-range decompression diagnostics */
+	/*@temp@*/
+	const struct FileStats		*fstat_full;
 };
 
 struct MTArg_Decoder {

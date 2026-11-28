@@ -39,6 +39,7 @@
 #include "./cli/formats/tta1_check.c"
 #include "./cli/formats/tta_seek.c"
 #include "./cli/formats/tta_seek_check.c"
+#include "./cli/formats/tta_seek_loc.c"
 #include "./cli/formats/tta_write.c"
 #include "./cli/formats/w64_check.c"
 #include "./cli/formats/w64_write.c"
@@ -57,5 +58,6 @@
 #include "./cli/opts/decode.c"
 #include "./cli/opts/encode.c"
 #include "./cli/opts/optsget.c"
+#include "./cli/sample_range.c"
 
 /* EOF //////////////////////////////////////////////////////////////////// */

@@ -4,6 +4,14 @@
 next:-------------------------------------------------------------------------
 
 	- performance improvements (rice encoder)
+	- ttaR: added `decode --samples=START:END' to decode a per-channel
+	  sample-frame range
+		- zero-based, half-open; START <= END <= declared sample count
+		- uses the seektable to seek to the first intersecting frame and
+		  decodes only the frames that intersect the range
+		- works with both single- and multi-threaded decoding
+		- a corrupt seektable or an unrepresentable frame offset is a
+		  fatal error before any output is written
 
 2.1.1 (2025-12-30):-----------------------------------------------------------
 

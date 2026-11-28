@@ -17,6 +17,7 @@
 #include "../libttaR.h"
 
 #include "./common.h"
+#include "./sample_range.h"
 
 /* //////////////////////////////////////////////////////////////////////// */
 
@@ -40,6 +41,8 @@ struct GlobalFlags {
 	bool		 quiet;
 	bool		 delete_src;
 	bool		 rawpcm;
+	bool		 use_sample_range;
+	struct SampleRange	sample_range;
 	enum ThreadMode	 threadmode:8u;
 	enum DecFormat	 decfmt:8u;
 };

@@ -28,6 +28,7 @@
 #include "../debug.h"
 #include "../formats.h"
 #include "../main.h"
+#include "../sample_range.h"
 
 #include "./bufs.h"
 #include "./mt-struct.h"
@@ -64,7 +65,7 @@ static void NOINLINE dec_frame_write(
 	struct LibTTAr_CodecState_User *RESTRICT,
 	const char *RESTRICT, FILE *RESTRICT outfile,
 	const char *RESTRICT, enum LibTTAr_SampleBytes, unsigned int,
-	uint32_t, int8_t, size_t, size_t
+	uint32_t, int8_t, size_t, size_t, size_t
 )
 /*@globals	fileSystem@*/
 /*@modifies	fileSystem,
@@ -83,6 +84,41 @@ static NOINLINE void dec_frame_zeropad(
 	uint8_t *RESTRICT pcmbuf, size_t, size_t, enum LibTTAr_SampleBytes
 )
 /*@modifies	*pcmbuf@*/
+;
+
+#undef decbuf
+static NOINLINE struct LibTTAr_CodecState_User dec_frame_check(
+	struct DecBuf *RESTRICT decbuf,
+	struct LibTTAr_CodecState_User *RESTRICT,
+	const char *RESTRICT, size_t, uint32_t, int8_t, size_t, size_t,
+	enum LibTTAr_SampleBytes
+)
+/*@globals	fileSystem,
+		g_nwarnings
+@*/
+/*@modifies	fileSystem,
+		g_nwarnings,
+		*decbuf->pcmbuf
+@*/
+;
+
+#undef db
+#undef dstat_out
+static void NOINLINE dec_frame_write_span(
+	struct DecBuf *RESTRICT decbuf,
+	/*@in@*/ struct DecStats *RESTRICT dstat_out,
+	struct LibTTAr_CodecState_User *RESTRICT,
+	const char *RESTRICT, FILE *RESTRICT outfile,
+	const char *RESTRICT, enum LibTTAr_SampleBytes, unsigned int,
+	uint32_t, int8_t, size_t, size_t,
+	const struct FrameSpan *RESTRICT, size_t, size_t
+)
+/*@globals	fileSystem@*/
+/*@modifies	fileSystem,
+		*decbuf->pcmbuf,
+		*dstat_out,
+		outfile
+@*/
 ;
 
 /* ------------------------------------------------------------------------ */
@@ -180,6 +216,10 @@ decst_loop(
 	struct DecBuf decbuf;
 	struct DecStats dstat;
 	/* * */
+	struct FrameSpan span;
+	bool span_isset = false;
+	size_t span_nframes_read = 0;
+	/* * */
 	size_t ni32_perframe, nbytes_tta_perframe, framesize_tta, nbytes_read;
 	size_t nsamples_perchan_dec_total = 0;
 	size_t nframes_target = seektable->nmemb, nframes_read = 0;
@@ -188,6 +228,8 @@ decst_loop(
 	uint32_t crc_read;
 	union {	size_t	z;
 		int	d;
+		off_t	o;
+		enum FileCheck	fc;
 	} result;
 
 	/* setup */
@@ -197,6 +239,44 @@ decst_loop(
 		CBM_SINGLE_THREADED
 	);
 	priv = priv_alloc(nchan);
+
+	/* range mode: seek to the first intersecting frame, and only decode
+	 * and read the intersecting frames
+	*/
+	if ( g_flag.use_sample_range ){
+		sample_range_span(
+			&span, &g_flag.sample_range, framelen,
+			seektable->nmemb
+		);
+		span_isset  = true;
+		nframes_read = span.first;
+		nframes_target = span.nmemb;
+		/* account for the frames preceding the span when deriving each
+		 * frame's sample count */
+		nsamples_perchan_dec_total = (size_t) (
+			span.first * framelen
+		);
+		if ( span.nmemb != 0 ){
+			off_t start_off;
+			size_t first_nbytes;
+
+			result.fc = seektable_span_locate(
+				&start_off, &first_nbytes, seektable,
+				span.first, span.nmemb, seektable->off
+			);
+			if UNLIKELY ( result.fc != FILECHECK_OK ){
+				error_filecheck(
+					result.fc, errno, fstat, infile_name
+				);
+				exit(result.fc);
+			}
+			result.o = fseeko(infile, start_off, SEEK_SET);
+			if UNLIKELY ( result.o != 0 ){
+				error_sys(errno, "fseeko", infile_name);
+			}
+		}
+	}
+	else {	nframes_target = seektable->nmemb; }
 
 	goto loop_entr;
 	do {
@@ -261,6 +341,11 @@ loop_truncated:
 		}
 		nframes_read += 1u;
 
+		/* note: in range mode the range-relative sample counts are
+		 * recovered from the source frame index, not from this
+		 * counter, so the counter only tracks the global position
+		*/
+
 		/* decode frame */
 		dec_retval = (int8_t) dec_frame_decode(
 			&decbuf, priv, &user, samplebytes, nchan,
@@ -269,11 +354,22 @@ loop_truncated:
 		);
 
 		/* write PCM to outfile */
-		dec_frame_write(
-			&decbuf, &dstat, &user, infile_name, outfile,
-			outfile_name, samplebytes, nchan, crc_read,
-			dec_retval, nsamples_flat_2pad, nbytes_tta_perframe
-		);
+		if UNLIKELY ( span_isset ){
+			dec_frame_write_span(
+				&decbuf, &dstat, &user, infile_name, outfile,
+				outfile_name, samplebytes, nchan, crc_read,
+				dec_retval, nsamples_flat_2pad,
+				nbytes_tta_perframe, &span,
+				span_nframes_read++, framelen
+			);
+		}
+		else {	dec_frame_write(
+				&decbuf, &dstat, &user, infile_name, outfile,
+				outfile_name, samplebytes, nchan, crc_read,
+				dec_retval, nsamples_flat_2pad,
+				nbytes_tta_perframe, nframes_read - 1u
+			);
+		}
 loop_entr:
 		if ( (! g_flag.quiet) && (nframes_read % SPINNER_FREQ == 0) ){
 			errprint_spinner();
@@ -341,6 +437,7 @@ decmt_loop(
 		outfile, outfile_name, infile, infile_name, seektable, &dstat,
 		&fstat_c
 	);
+	io_state.fstat_full = fstat;
 
 	/* create coders */
 	thread_create(
@@ -446,6 +543,80 @@ dec_frame_decode(
 	return status;
 }
 
+/**@fn dec_frame_check
+ * @brief run the decode-failure and frame-CRC checks for a decoded frame
+ *
+ * @param decbuf              - decode buffers struct
+ * @param user_in             - user state struct
+ * @param infile_name         - name of the source file (warnings/errors)
+ * @param frame_index         - source frame number (diagnostics)
+ * @param crc_read            - CRC from source file (little-endian)
+ * @param dec_retval          - return value from dec_frame_decode()
+ * @param nsamples_flat_2pad  - number of i32 samples to zero-pad
+ * @param nbytes_tta_perframe - number of TTA bytes in the current frame
+ *
+ * @return the user struct with the footer accounted for
+ *
+ * @note this always inspects the entire frame, even when only part of its
+ *   PCM is written out.
+**/
+static NOINLINE struct LibTTAr_CodecState_User
+dec_frame_check(
+	struct DecBuf *const RESTRICT decbuf,
+	struct LibTTAr_CodecState_User *const RESTRICT user_in,
+	const char *const RESTRICT infile_name, const size_t frame_index,
+	const uint32_t crc_read /*little-endian*/, const int8_t dec_retval,
+	const size_t nsamples_flat_2pad, const size_t nbytes_tta_perframe,
+	const enum LibTTAr_SampleBytes samplebytes
+)
+/*@globals	fileSystem,
+		g_nwarnings
+@*/
+/*@modifies	fileSystem,
+		g_nwarnings,
+		*decbuf->pcmbuf
+@*/
+{
+	struct LibTTAr_CodecState_User user = *user_in;
+	const uint32_t crc_read_h = byteswap_letoh_u32(crc_read);
+
+	/* failure check */
+	if UNLIKELY ( dec_retval != (int8_t) LIBTTAr_DRV_OK_DONE ){
+		if ( dec_retval == (int8_t) LIBTTAr_DRV_FAIL_DECODE ){
+			warning_tta("%s: frame %zu: decoding failed",
+				infile_name, frame_index
+			);
+		}
+		else if ( dec_retval == (int8_t) LIBTTAr_DRV_INVAL_TRUNC ){
+			warning_tta("%s: frame %zu: last sample truncated, "
+				"zero-padding", infile_name, frame_index
+			);
+		}
+		else {	error_tta("%s: frame %zu: unexpected decode status "
+				"(%" PRId8 ")",
+				infile_name, frame_index, dec_retval
+			);
+		}
+		/* zero-pad */
+		dec_frame_zeropad(
+			decbuf->pcmbuf, user.ni32_total, nsamples_flat_2pad,
+			samplebytes
+		);
+		/* re-calc CRC over the whole frame payload */
+		user.crc = libttaR_crc32(decbuf->ttabuf, nbytes_tta_perframe);
+	}
+
+	/* check frame CRC over the whole frame payload */
+	if UNLIKELY ( user.crc != crc_read_h ){
+		warning_tta("%s: frame %zu is corrupted; bad CRC",
+			infile_name, frame_index
+		);
+	}
+	user.nbytes_tta_total += sizeof crc_read_h;
+
+	return user;
+}
+
 /**@fn dec_frame_write
  * @brief write a PCM frame
  *
@@ -461,6 +632,7 @@ dec_frame_decode(
  * @param dec_retval          - return value from dec_frame_decode()
  * @param nsamples_flat_2pad  - number of i32 samples to zero-pad
  * @param nbytes_tta_perframe - number of TTA bytes in the current frame
+ * @param frame_index         - source frame number (diagnostics)
 **/
 static NOINLINE void
 dec_frame_write(
@@ -471,7 +643,8 @@ dec_frame_write(
 	FILE *const RESTRICT outfile, const char *const RESTRICT outfile_name,
 	const enum LibTTAr_SampleBytes samplebytes, const unsigned int nchan,
 	const uint32_t crc_read /*little-endian*/, const int8_t dec_retval,
-	const size_t nsamples_flat_2pad, const size_t nbytes_tta_perframe
+	const size_t nsamples_flat_2pad, const size_t nbytes_tta_perframe,
+	const size_t frame_index
 )
 /*@globals	fileSystem@*/
 /*@modifies	fileSystem,
@@ -480,46 +653,13 @@ dec_frame_write(
 		outfile
 @*/
 {
-	struct LibTTAr_CodecState_User user = *user_in;
+	struct LibTTAr_CodecState_User user = dec_frame_check(
+		decbuf, user_in, infile_name, frame_index, crc_read,
+		dec_retval, nsamples_flat_2pad, nbytes_tta_perframe,
+		samplebytes
+	);
 	struct DecStats dstat = *dstat_out;
-	uint32_t   crc_read_h = byteswap_letoh_u32(crc_read);
-	union { unsigned int	u;
-		size_t		z;
-	} result;
-
-	/* failure check */
-	if UNLIKELY ( dec_retval != (int8_t) LIBTTAr_DRV_OK_DONE ){
-		if ( dec_retval == (int8_t) LIBTTAr_DRV_FAIL_DECODE ){
-			warning_tta("%s: frame %zu: decoding failed",
-				infile_name, dstat.nframes
-			);
-		}
-		else if ( dec_retval == (int8_t) LIBTTAr_DRV_INVAL_TRUNC ){
-			warning_tta("%s: frame %zu: last sample truncated, "
-				"zero-padding", infile_name, dstat.nframes
-			);
-		}
-		else {	error_tta("%s: frame %zu: unexpected decode status "
-				"(%" PRId8 ")",
-				infile_name, dstat.nframes, dec_retval
-			);
-		}
-		/* zero-pad */
-		dec_frame_zeropad(
-			decbuf->pcmbuf, user.ni32_total, nsamples_flat_2pad,
-			samplebytes
-		);
-		/* re-calc CRC */
-		user.crc = libttaR_crc32(decbuf->ttabuf, nbytes_tta_perframe);
-	}
-
-	/* check frame CRC */
-	if UNLIKELY ( user.crc != crc_read_h ){
-		warning_tta("%s: frame %zu is corrupted; bad CRC",
-			infile_name, dstat.nframes
-		);
-	}
-	user.nbytes_tta_total += sizeof crc_read_h;
+	union { size_t z; } result;
 
 	/* write frame */
 	result.z = fwrite(
@@ -533,6 +673,101 @@ dec_frame_write(
 	dstat.nframes          += 1u;
 	dstat.nsamples_flat    += user.ni32_total;
 	dstat.nsamples_perchan += (size_t) (user.ni32_total / nchan);
+	dstat.nbytes_decoded   += user.nbytes_tta_total;
+
+	*dstat_out = dstat;
+	return;
+}
+
+/**@fn dec_frame_write_span
+ * @brief write the portion of a decoded frame that intersects the range
+ *
+ * @param decbuf              - decode buffers struct
+ * @param dstat_out           - decode stats return struct
+ * @param user_in             - user state struct
+ * @param infile_name         - name of the source file (warnings/errors)
+ * @param outfile             - destination file
+ * @param outfile_name        - name of the destination file (warnings/errors)
+ * @param samplebytes         - number of bytes per PCM sample
+ * @param nchan               - number of audio channels
+ * @param crc_read            - CRC from source file (little-endian)
+ * @param dec_retval          - return value from dec_frame_decode()
+ * @param nsamples_flat_2pad  - number of i32 samples to zero-pad
+ * @param nbytes_tta_perframe - number of TTA bytes in the current frame
+ * @param span                - frame span struct
+ * @param span_idx            - index of this frame within the span
+ * @param framelen            - number of sample frames per ideal TTA frame
+ *
+ * @note the frame's CRC is still checked over the whole payload
+**/
+static NOINLINE void
+dec_frame_write_span(
+	struct DecBuf *const RESTRICT decbuf,
+	/*@in@*/ struct DecStats *const RESTRICT dstat_out,
+	struct LibTTAr_CodecState_User *const RESTRICT user_in,
+	const char *const RESTRICT infile_name,
+	FILE *const RESTRICT outfile, const char *const RESTRICT outfile_name,
+	const enum LibTTAr_SampleBytes samplebytes, const unsigned int nchan,
+	const uint32_t crc_read /*little-endian*/, const int8_t dec_retval,
+	const size_t nsamples_flat_2pad, const size_t nbytes_tta_perframe,
+	const struct FrameSpan *const RESTRICT span, const size_t span_idx,
+	const size_t framelen
+)
+/*@globals	fileSystem@*/
+/*@modifies	fileSystem,
+		*decbuf->pcmbuf,
+		*dstat_out,
+		outfile
+@*/
+{
+	struct LibTTAr_CodecState_User user = dec_frame_check(
+		decbuf, user_in, infile_name, span->first + span_idx,
+		crc_read, dec_retval, nsamples_flat_2pad, nbytes_tta_perframe,
+		samplebytes
+	);
+	struct DecStats dstat = *dstat_out;
+	const size_t frame_start = (size_t) (
+		(span->first + span_idx) * framelen
+	);
+	const size_t nsamples_perchan = (size_t) (user.ni32_total / nchan);
+	size_t from, to, nsamples_out;
+	union { size_t z; } result;
+
+	/* intersect this frame's PCM with the requested range */
+	if ( span->start > frame_start ){
+		from = span->start - frame_start;
+	}
+	else {	from = 0; }
+	if ( from > nsamples_perchan ){
+		from = nsamples_perchan;
+	}
+	if ( span->end < frame_start + nsamples_perchan ){
+		to = span->end - frame_start;
+	}
+	else {	to = nsamples_perchan; }
+	if ( to < from ){
+		to = from;
+	}
+	nsamples_out = to - from;
+
+	/* write only the intersecting PCM samples */
+	if ( nsamples_out != 0 ){
+		const size_t offset = (size_t) (
+			from * nchan * samplebytes
+		);
+		result.z = fwrite(
+			&decbuf->pcmbuf[offset], samplebytes,
+			nsamples_out * nchan, outfile
+		);
+		if UNLIKELY ( result.z != nsamples_out * nchan ){
+			error_sys(errno, "fwrite", outfile_name);
+		}
+	}
+
+	/* update dstat (actual output only) */
+	dstat.nframes          += 1u;
+	dstat.nsamples_flat    += nsamples_out * nchan;
+	dstat.nsamples_perchan += nsamples_out;
 	dstat.nbytes_decoded   += user.nbytes_tta_total;
 
 	*dstat_out = dstat;
@@ -654,6 +889,9 @@ decmt_io(struct MTArg_DecIO *const RESTRICT arg)
 	const size_t nsamples_enc                  = fstat->nsamples_enc;
 	/* * */
 	struct DecStats dstat = *arg->dstat_out;
+	struct FrameSpan span;
+	bool   span_isset = false;
+	size_t nframes_written = 0;
 	size_t framesize_tta, nbytes_read;
 	size_t nsamples_perchan_dec_total = 0;
 	bool   start_writing  = false;
@@ -661,7 +899,54 @@ decmt_io(struct MTArg_DecIO *const RESTRICT arg)
 	unsigned int idx = 0, last;
 	union {	unsigned int	u;
 		size_t		z;
+		off_t		o;
+		enum FileCheck	fc;
 	} result;
+
+	/* range mode: seek to the first intersecting frame */
+	if ( g_flag.use_sample_range ){
+		sample_range_span(
+			&span, &g_flag.sample_range, nsamples_perframe,
+			seektable->nmemb
+		);
+		span_isset   = true;
+		nframes_read = span.first;
+		nframes_target = span.nmemb;
+		nsamples_perchan_dec_total = (size_t) (
+			span.first * nsamples_perframe
+		);
+
+		if ( span.nmemb == 0 ){
+			/* nothing to decode: release the decoder threads */
+			unsigned int k;
+
+			for ( k = 0; k < framequeue_len; ++k ){
+				semaphore_post(nframes_avail);
+			}
+			*arg->dstat_out = dstat;
+			return (start_routine_ret) 0;
+		}
+		else {
+			off_t start_off;
+			size_t first_nbytes;
+
+			result.fc = seektable_span_locate(
+				&start_off, &first_nbytes, seektable,
+				span.first, span.nmemb, seektable->off
+			);
+			if UNLIKELY ( result.fc != FILECHECK_OK ){
+				error_filecheck(
+					result.fc, errno, arg->fstat_full,
+					infile_name
+				);
+				exit(result.fc);
+			}
+			result.o = fseeko(infile_handle, start_off, SEEK_SET);
+			if UNLIKELY ( result.o != 0 ){
+				error_sys(errno, "fseeko", infile_name);
+			}
+		}
+	}
 
 	goto loop0_entr;
 	do {
@@ -745,12 +1030,25 @@ loop0_truncated:
 		semaphore_wait(&post_decoder[idx]);
 
 		/* write pcm to outfile */
-		dec_frame_write(
-			&decbuf[idx], &dstat, &user[idx], infile_name,
-			outfile_handle, outfile_name, samplebytes, nchan,
-			crc_read[idx], dec_retval[idx],
-			nsamples_flat_2pad[idx], nbytes_tta_perframe[idx]
-		);
+		if UNLIKELY ( span_isset ){
+			dec_frame_write_span(
+				&decbuf[idx], &dstat, &user[idx], infile_name,
+				outfile_handle, outfile_name, samplebytes, nchan,
+				crc_read[idx], dec_retval[idx],
+				nsamples_flat_2pad[idx],
+				nbytes_tta_perframe[idx], &span,
+				nframes_written, nsamples_perframe
+			);
+		}
+		else {	dec_frame_write(
+				&decbuf[idx], &dstat, &user[idx], infile_name,
+				outfile_handle, outfile_name, samplebytes, nchan,
+				crc_read[idx], dec_retval[idx],
+				nsamples_flat_2pad[idx],
+				nbytes_tta_perframe[idx], nframes_written
+			);
+		}
+		nframes_written += 1u;
 loop0_entr:
 		if ( (! g_flag.quiet) && (nframes_read % SPINNER_FREQ == 0) ){
 			errprint_spinner();
@@ -776,12 +1074,25 @@ loop0_read:
 		semaphore_wait(&post_decoder[idx]);
 
 		/* write pcm to outfile */
-		dec_frame_write(
-			&decbuf[idx], &dstat, &user[idx], infile_name,
-			outfile_handle, outfile_name, samplebytes, nchan,
-			crc_read[idx], dec_retval[idx],
-			nsamples_flat_2pad[idx], nbytes_tta_perframe[idx]
-		);
+		if UNLIKELY ( span_isset ){
+			dec_frame_write_span(
+				&decbuf[idx], &dstat, &user[idx], infile_name,
+				outfile_handle, outfile_name, samplebytes, nchan,
+				crc_read[idx], dec_retval[idx],
+				nsamples_flat_2pad[idx],
+				nbytes_tta_perframe[idx], &span,
+				nframes_written, nsamples_perframe
+			);
+		}
+		else {	dec_frame_write(
+				&decbuf[idx], &dstat, &user[idx], infile_name,
+				outfile_handle, outfile_name, samplebytes, nchan,
+				crc_read[idx], dec_retval[idx],
+				nsamples_flat_2pad[idx],
+				nbytes_tta_perframe[idx], nframes_written
+			);
+		}
+		nframes_written += 1u;
 
 		/* mark frame as done and make available */
 		nbytes_tta_perframe[idx] = 0;

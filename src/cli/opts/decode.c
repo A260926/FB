@@ -40,6 +40,22 @@ static int opt_decode_format(
 @*/
 ;
 
+static int opt_decode_samples(
+	unsigned int, unsigned int, unsigned int, char *const *argv,
+	enum OptMode
+)
+/*@globals	fileSystem,
+		internalState,
+		g_flag
+@*/
+/*@modifies	fileSystem,
+		internalState,
+		g_flag.use_sample_range,
+		g_flag.sample_range,
+		**argv
+@*/
+;
+
 static int
 opt_decode_help(
 	unsigned int, unsigned int, unsigned int, char *const *, enum OptMode
@@ -50,7 +66,7 @@ opt_decode_help(
 
 /* //////////////////////////////////////////////////////////////////////// */
 
-#define DECODE_OPTDICT_NMEMB	8u
+#define DECODE_OPTDICT_NMEMB	9u
 
 /**@var decode_optdict_longopt
  * @brief array of longopts
@@ -63,6 +79,7 @@ static const char *decode_optdict_longopt[DECODE_OPTDICT_NMEMB] = {
 	"format",
 	"outfile",
 	"quiet",
+	"samples",
 	"threads",
 	"help"
 };
@@ -78,6 +95,7 @@ static const int decode_optdict_shortopt[DECODE_OPTDICT_NMEMB] = {
 	'f',	/* format          */
 	'o',	/* outfile         */
 	'q',	/* quiet           */
+	-1 ,	/* samples         */
 	't',	/* threads         */
 	'?'	/* help            */
 };
@@ -93,6 +111,7 @@ static optdict_fnptr decode_optdict_fn[DECODE_OPTDICT_NMEMB] = {
 	opt_decode_format,
 	opt_common_outfile,
 	opt_common_quiet,
+	opt_decode_samples,
 	opt_common_threads,
 	opt_decode_help,
 };
@@ -186,6 +205,75 @@ opt_decode_format(
 			);
 		} else{;}
 	}
+	return retval;
+}
+
+/**@fn opt_decode_samples
+ * @brief sets a per-channel sample-frame range to decode
+ *
+ * @param optind0 - index of  'argv'
+ * @param optind1 - index of *'argv'
+ * @param argc    - argument count from main()
+ * @param argv    - argument vector from main()
+ * @param mode    - short or long
+ *
+ * @return number of args used (long), or number of char's read (short)
+**/
+static int
+opt_decode_samples(
+	const unsigned int optind0, const unsigned int optind1,
+	const unsigned int argc, char *const *const argv,
+	const enum OptMode mode
+)
+/*@globals	fileSystem,
+		internalState,
+		g_flag
+@*/
+/*@modifies	fileSystem,
+		internalState,
+		g_flag.use_sample_range,
+		g_flag.sample_range,
+		**argv
+@*/
+{
+	char *const opt = &argv[optind0][optind1];
+	/* * */
+	int retval   = 0;
+	char *subopt = NULL;
+
+	switch ( mode ){
+	default:
+		assert(false);
+		break;
+	case OPTMODE_SHORT:
+		if ( opt[1u] == '\0' ){
+			optsget_argcheck(optind0, argc, 1u, opt);
+			subopt = argv[optind0 + 1u];
+			retval = -1;
+		}
+		else {	subopt = &opt[1u];
+			retval = (int) strlen(subopt);
+		}
+		break;
+	case OPTMODE_LONG:
+		(void) strtok(opt, "=");
+		subopt = strtok(NULL, "");
+		if UNLIKELY ( subopt == NULL ){
+			/* accept "--samples START:END" as well as
+			 * "--samples=START:END"
+			*/
+			optsget_argcheck(optind0, argc, 1u, opt);
+			subopt = argv[optind0 + 1u];
+			retval = 1;
+		}
+		else {	retval = 0; }
+		break;
+	}
+	assert(subopt != NULL);
+
+	sample_range_parse(&g_flag.sample_range, subopt, "--samples");
+	g_flag.use_sample_range = true;
+
 	return retval;
 }
 

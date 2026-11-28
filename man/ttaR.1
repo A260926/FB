@@ -146,6 +146,16 @@ FMT   : raw, w64, wav
 .RE
 .RE
 
+\fB\-\-samples\fR\=\fB\fISTART\fR\fR:\fB\fIEND\fR\fR
+.RS 4
+Decode only a range of per\-channel sample frames.
+The range is zero\-based and half\-open (START is included, END is excluded).
+Both endpoints are decimal non\-negative integers and must satisfy
+START\ \(<=\)\ END\ \(<=\)\ the file's declared total sample frames.
+An empty range produces zero output samples.
+When multiple input files are given, the range is interpreted separately for
+each file.
+.RE
 .RE
 
 .\" ##########################################################################
