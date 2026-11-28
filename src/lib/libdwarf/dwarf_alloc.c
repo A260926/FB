@@ -1031,9 +1031,6 @@ dwarf_dealloc(Dwarf_Debug dbg,
         return;
 #endif /* DEBUG_ALLOC*/
     }
-    if (dbg && alloc_type == DW_DLA_ERROR) {
-        dbg = dbg->de_errors_dbg;
-    }
     if (dbg && dbg->de_alloc_tree) {
         /*  If it's a string in debug_info etc doing
             (char *)space - DW_RESERVE is totally bogus. */
@@ -1081,6 +1078,28 @@ dwarf_dealloc(Dwarf_Debug dbg,
             __LINE__,__FILE__);
         fflush(stdout);
 #endif /* DEBUG_ALLOC*/
+    }
+    if (alloc_type == DW_DLA_ERROR) {
+        Dwarf_Error ep = (Dwarf_Error)space;
+
+        if (ep->er_static_alloc == DE_STANDARD && r->rd_dbg &&
+            r->rd_dbg != dbg) {
+            /*  Errors are allocated on the object that owned
+                the error allocation at creation time (the main
+                end of a tied pair, if the pair was bound then).
+                The relation or the binding state may have
+                changed since, so dealloc using the recorded
+                owner, not whatever de_errors_dbg says now.  That
+                keeps each error in exactly the tree it was
+                inserted into: a dealloc through the other still
+                open end of the pair must not leave a dangling
+                entry in the owner's tree. */
+            Dwarf_Debug owner = (Dwarf_Debug)r->rd_dbg;
+
+            if (owner->de_magic == DBG_IS_VALID) {
+                dbg = owner;
+            }
+        }
     }
     if (dbg && alloc_type != r->rd_type) {
         /*  Something is mixed up. */
@@ -1308,6 +1327,11 @@ _dwarf_free_all_of_one_debug(Dwarf_Debug dbg)
         _dwarf_free_static_errlist();
         return DW_DLV_NO_ENTRY;
     }
+    /*  If this object is part of a tied pair, cut the pair
+        first so the surviving end no longer points at this
+        object and allocates errors on itself again.  This
+        runs before the allocation tree is destroyed below. */
+    _dwarf_untie_dbg(dbg);
     /*  To do complete validation that we have no surprising
         missing or erroneous deallocs it is advisable to do
         the dwarf_deallocs here

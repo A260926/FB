@@ -111,6 +111,19 @@ Call dwarf_set_tied (p1,p2) (it is ok if p2 == NULL)
 All this is only useful if p1 has dwo/dwp sections
 (split-dwarf) and p2 has the relevant TAG_skeleton(s)
 
+An object may participate in at most one tied relation at
+a time.  Binding an object that already has a role (or
+binding an object to itself) fails with DW_DLV_ERROR and
+leaves the existing relation untouched.
+dwarf_set_tied(p1,NULL) detaches the pair and returns both
+objects to the initial conditions above, whichever end of
+the pair p1 is.  Detaching an unbound object is a no-op
+that returns DW_DLV_OK.
+
+Closing either end of a pair (dwarf_finish) detaches the
+pair first, so the surviving object never refers to the
+closed one and may be bound again or used normally.
+
 If px->de_secondary_dbg is non-null
     and px->secondary_dbg == px
     then px is secondary.
@@ -579,6 +592,78 @@ dwarf_finish(Dwarf_Debug dbg)
     return dwarf_object_finish(dbg);
 }
 
+/*  The main end of a relation has de_secondary_dbg pointing at
+    the tied end.  The tied end has de_secondary_dbg == itself.
+    This is how DBG_IS_PRIMARY() and DBG_IS_SECONDARY() tell
+    the ends apart.  de_primary_dbg and de_errors_dbg of the
+    tied end point at the main end.  See the design comment
+    near the top of this file.
+
+    Is dbg currently either end of a tied relation? */
+static int
+dbg_in_relation(Dwarf_Debug dbg)
+{
+    if (!dbg) {
+        return FALSE;
+    }
+    if (DBG_IS_SECONDARY(dbg)) {
+        return TRUE;
+    }
+    /*  A main end has a non-null secondary that is some other
+        object. */
+    if (dbg->de_secondary_dbg &&
+        dbg->de_secondary_dbg != dbg) {
+        return TRUE;
+    }
+    return FALSE;
+}
+
+/*  Return both ends of a relation to the freshly initialized
+    state.  Does nothing if dbg is not part of a relation.
+    Errors allocated while tied were allocated on the shared
+    de_errors_dbg (the main end) and stay valid; the tied end
+    now allocates its own.  This function only changes the
+    relation bookkeeping, never the errors already handed out. */
+void
+_dwarf_untie_dbg(Dwarf_Debug dbg)
+{
+    Dwarf_Debug maindbg = 0;
+    Dwarf_Debug tieddbg = 0;
+
+    if (!dbg_in_relation(dbg)) {
+        return;
+    }
+    if (DBG_IS_SECONDARY(dbg)) {
+        /*  dbg is the tied end.  Its de_primary_dbg is the
+            main end (set at bind time and only ever cleared
+            here or when the main end is freed). */
+        tieddbg = dbg;
+        maindbg = dbg->de_primary_dbg;
+        if (!maindbg || maindbg == tieddbg) {
+            /*  Damaged relation.  Fall back to self only. */
+            dbg->de_secondary_dbg = 0;
+            dbg->de_primary_dbg = dbg;
+            dbg->de_errors_dbg = dbg;
+            return;
+        }
+    } else {
+        /*  dbg is the main end. */
+        maindbg = dbg;
+        tieddbg = dbg->de_secondary_dbg;
+    }
+    if (maindbg->de_secondary_dbg == tieddbg) {
+        maindbg->de_secondary_dbg = 0;
+        maindbg->de_tied_data.td_tied_object = 0;
+    }
+    maindbg->de_primary_dbg = maindbg;
+    maindbg->de_errors_dbg = maindbg;
+    if (tieddbg) {
+        tieddbg->de_secondary_dbg = 0;
+        tieddbg->de_primary_dbg = tieddbg;
+        tieddbg->de_errors_dbg = tieddbg;
+    }
+}
+
 /*
     tieddbg should be the executable or .o
     that has the .debug_addr section that
@@ -590,6 +675,9 @@ dwarf_finish(Dwarf_Debug dbg)
     links between main and any previous tied-file setup.
     New September 2015.
     Logic revised Nov 2024. See dwarf_opaque.h
+    Relation state revisited Nov 2026: either end may be
+    passed to detach; an object may be in at most one
+    relation; failures leave any existing relation untouched.
 */
 int
 dwarf_set_tied_dbg(Dwarf_Debug primary_dbg,
@@ -606,7 +694,10 @@ dwarf_set_tied_dbg(Dwarf_Debug primary_dbg,
         return DW_DLV_ERROR;
     }
     if (secondary_dbg) {
-        if (primary_dbg->de_secondary_dbg ) {
+        CHECK_DBG(secondary_dbg,error,"dwarf_set_tied_dbg() "
+            "dw_secondary_dbg"
+            "is invalid");
+        if (dbg_in_relation(primary_dbg)) {
             _dwarf_error_string(primary_dbg,error,
                 DW_DLE_NO_TIED_FILE_AVAILABLE,
                 "DW_DLE_NO_TIED_FILE_AVAILABLE: bad argument to "
@@ -614,27 +705,39 @@ dwarf_set_tied_dbg(Dwarf_Debug primary_dbg,
                 " a secondary_dbg!");
             return DW_DLV_ERROR;
         }
+        if (dbg_in_relation(secondary_dbg)) {
+            _dwarf_error_string(primary_dbg,error,
+                DW_DLE_NO_TIED_FILE_AVAILABLE,
+                "DW_DLE_NO_TIED_FILE_AVAILABLE: bad argument to "
+                "dwarf_set_tied_dbg(), secondary_dbg is already"
+                " part of a tied relation!");
+            return DW_DLV_ERROR;
+        }
+        /*  Bind.  The main end's de_tied_data member is the
+            pointer split-DWARF reads use; both ends record
+            their role so either end can detach the pair. */
         primary_dbg->de_tied_data.td_tied_object = secondary_dbg;
         primary_dbg->de_secondary_dbg = secondary_dbg;
+        primary_dbg->de_primary_dbg = primary_dbg;
+        primary_dbg->de_errors_dbg = primary_dbg;
+        secondary_dbg->de_primary_dbg = primary_dbg;
         secondary_dbg->de_secondary_dbg = secondary_dbg;
         secondary_dbg->de_errors_dbg = primary_dbg;
-        CHECK_DBG(secondary_dbg,error,"dwarf_set_tied_dbg() "
-            "dw_secondary_dbg"
-            "is invalid");
-        primary_dbg->de_secondary_dbg = secondary_dbg;
         return DW_DLV_OK;
-    } else {
-        primary_dbg->de_secondary_dbg = 0;
-        primary_dbg->de_tied_data.td_tied_object = 0;
     }
+    /*  Detach, accepting either end of the relation.  If
+        primary_dbg is not tied this is a successful no-op. */
+    _dwarf_untie_dbg(primary_dbg);
     return DW_DLV_OK;
 }
 
-/*  New September 2015.
-    As of Aug 2023 this correctly returns tied_dbg
-    whether main or tied passed in. Before this
-    it would return the dbg passed in.
-    If there is no tied-dbg this returns main dbg. */
+/*  Return the tied-Dwarf_Debug of the pair.
+    Only a main end of a bound pair returns the tied object.
+    A tied end, or an unbound object, returns NULL.
+    If dw_dbg is unbound this is DW_DLV_OK with NULL output.
+    New September 2015.
+    Semantics follow the libdwarf.h documentation:
+    returns the tied object only when passed a bound main end. */
 int
 dwarf_get_tied_dbg(Dwarf_Debug dw_dbg,
     Dwarf_Debug *dw_secondary_dbg_out,
@@ -642,19 +745,8 @@ dwarf_get_tied_dbg(Dwarf_Debug dw_dbg,
 {
     CHECK_DBG(dw_dbg,dw_error,"dwarf_get_tied_dbg()");
     *dw_secondary_dbg_out = 0;
-    if (DBG_IS_PRIMARY(dw_dbg)) {
-        if (!dw_dbg->de_secondary_dbg) {
-            *dw_secondary_dbg_out = dw_dbg;
-            return DW_DLV_OK;
-        }
+    if (dbg_in_relation(dw_dbg) && DBG_IS_PRIMARY(dw_dbg)) {
         *dw_secondary_dbg_out = dw_dbg->de_secondary_dbg;
-        return DW_DLV_OK;
     }
-    if (DBG_IS_SECONDARY(dw_dbg)) {
-        *dw_secondary_dbg_out = dw_dbg;
-        return DW_DLV_OK;
-    }
-    /*  Leave returned secondary_dbg_out NULL,
-        this should not happen */
     return DW_DLV_OK;
 }

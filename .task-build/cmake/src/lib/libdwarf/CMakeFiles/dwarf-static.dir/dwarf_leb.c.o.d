@@ -1,0 +1,21 @@
+src/lib/libdwarf/CMakeFiles/dwarf-static.dir/dwarf_leb.c.o: \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/SDKSettings.json \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf_leb.c \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/.task-build/cmake/config.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/stddef.h \
+  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/stddef.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_header_macro.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_ptrdiff_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_size_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_wchar_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_max_align_t.h \
+  /Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_offsetof.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/libdwarf.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf_local_malloc.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/libdwarf_private.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf_base_types.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf_opaque.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf_error.h \
+  /Volumes/UserFBWorkspace/questions/FS4F6394F27B1EU16213/attempts/20261128T162910981352Z/repo/src/lib/libdwarf/dwarf_util.h

@@ -1047,6 +1047,12 @@ int _dwarf_merge_all_base_attrs_of_cu_die(Dwarf_CU_Context context,
 void _dwarf_tied_destroy_free_node(void *node);
 void _dwarf_destroy_group_map(Dwarf_Debug dbg);
 
+/*  Detach dbg from any tied relation of which it is a part,
+    restoring both ends to independent state.  A no-op if dbg
+    is not tied.  Used by dwarf_set_tied_dbg(NULL) and before
+    either end of a relation is freed. */
+void _dwarf_untie_dbg(Dwarf_Debug dbg);
+
 int _dwarf_section_get_target_group(Dwarf_Debug dbg,
     unsigned   obj_section_index,
     unsigned * groupnumber,

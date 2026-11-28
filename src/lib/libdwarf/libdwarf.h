@@ -1900,8 +1900,31 @@ DW_API int dwarf_object_finish(Dwarf_Debug dw_dbg);
     the error details.
     @return DW_DLV_OK etc.
 
+    An object may take part in at most one tied relation at a
+    time.  Passing the same object as both ends, or passing an
+    object that already has a role as either end, returns
+    DW_DLV_ERROR through the normal error reporting and leaves
+    any existing relation unchanged.  Opening a new relation
+    does not require the objects to have been read yet.
+
+    Passing NULL as dw_tied_dbg detaches the relation and
+    returns both ends to independent state.  Either end of the
+    pair may be passed in that way; detaching an object that is
+    not tied is a no-op that returns DW_DLV_OK.
+
+    While two objects are tied, errors created from either end
+    are allocated on the main end (the dw_split_dbg), and the
+    error callback still uses the main end's argument.  Each
+    error keeps its original allocation owner across later
+    binding changes; call dwarf_dealloc_error with the still
+    open object the error was allocated on.  Closing either
+    end detaches the pair first, so the surviving object never
+    refers to the closed one.
+
     @see example2
     @see example3
+
+    See examples/tied_ownership.c for a complete example.
 */
 DW_API int dwarf_set_tied_dbg(Dwarf_Debug dw_split_dbg,
     Dwarf_Debug  dw_tied_dbg,
@@ -1931,7 +1954,9 @@ DW_API int dwarf_set_tied_dbg(Dwarf_Debug dw_split_dbg,
     null(0) through the pointer.
     If there is no tied-Dwarf_Debug (meaning there is
     just a main-Dwarf_Debug) the function returns
-    null (0) through the pointer.
+    null (0) through the pointer.  The same is true for
+    an object that used to be tied but whose partner was
+    closed: closing either end detaches the pair.
     @param dw_error
     If the dw_dbg is invalid or damaged then the function
     returns DW_DLV_ERROR and
@@ -7162,6 +7187,16 @@ DW_API void  dwarf_error_creation(Dwarf_Debug dw_dbg ,
     A pointer to a Dwarf_Error.  The pointer is then stale
     so you should immediately zero that pointer passed
     in.
+
+    For a tied pair, an error created while the pair was
+    bound was allocated on the main end of that pair, and
+    that allocation owner does not change if the pair is
+    later detached.  Pass the same still-open object whose
+    allocation tree holds the error, which for a collected
+    error is the main end the pair had when the error was
+    created.  Freeing through the other still-open end of
+    the pair is accepted and removes the error from its
+    actual owner.
 */
 DW_API void dwarf_dealloc_error(Dwarf_Debug dw_dbg,
     Dwarf_Error dw_error);
