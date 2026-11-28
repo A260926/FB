@@ -7,12 +7,15 @@
 // be found in the AUTHORS file in the root of the source tree.
 #include "common/vp9_header_parser.h"
 
-#include <stdio.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "common/vp9_syntax.h"
 
 namespace vp9_parser {
 
 bool Vp9HeaderParser::SetFrame(const uint8_t* frame, size_t length) {
-  if (!frame || length == 0)
+  if (frame == NULL || length == 0)
     return false;
 
   frame_ = frame;
@@ -37,233 +40,75 @@ bool Vp9HeaderParser::ParseUncompressedHeader(const uint8_t* frame,
                                               size_t length) {
   if (!SetFrame(frame, length))
     return false;
-  const int frame_marker = VpxReadLiteral(2);
-  if (frame_marker != kVp9FrameMarker) {
-    fprintf(stderr, "Invalid VP9 frame_marker:%d\n", frame_marker);
+
+  // The parser must not carry state from a previous frame into this one, but
+  // it must also not clobber fields that the header does not mention. Seed the
+  // fields that SetFrame() historically reset with their reset values, seed
+  // the fields that historically persisted with the current member values,
+  // then merge only the fields the parsed header actually contained.
+  internal::Vp9HeaderFields fields;
+  fields.profile = -1;
+  fields.show_existing = 0;
+  fields.key = 0;
+  fields.show_frame = 0;
+  fields.error_resilient_mode = 0;
+  fields.intra_only = 0;
+  fields.reset_frame_context = 0;
+  fields.color_space = 0;
+  fields.color_range = 0;
+  fields.subsampling_x = 0;
+  fields.subsampling_y = 0;
+  fields.refresh_frame_flags = 0;
+  fields.bit_depth = bit_depth_;
+  fields.width = width_;
+  fields.height = height_;
+  fields.display_width = display_width_;
+  fields.display_height = display_height_;
+  fields.row_tiles = row_tiles_;
+  fields.column_tiles = column_tiles_;
+  fields.frame_parallel_mode = frame_parallel_mode_;
+
+  internal::Vp9BitReader reader(frame, length);
+  if (!internal::ParseUncompressedHeaderInternal(
+          &reader, internal::kParseLegacy, &fields)) {
     return false;
   }
 
-  profile_ = ReadBit();
-  profile_ |= ReadBit() << 1;
-  if (profile_ > 2)
-    profile_ += ReadBit();
-
-  // TODO(fgalligan): Decide how to handle show existing frames.
-  show_existing_frame_ = ReadBit();
-  if (show_existing_frame_)
-    return true;
-
-  key_ = !ReadBit();
-  altref_ = !ReadBit();
-  error_resilient_mode_ = ReadBit();
-  if (key_) {
-    if (!ValidateVp9SyncCode()) {
-      fprintf(stderr, "Invalid Sync code!\n");
-      return false;
-    }
-
-    ParseColorSpace();
-    ParseFrameResolution();
-    ParseFrameParallelMode();
-    ParseTileInfo();
-  } else {
-    intra_only_ = altref_ ? ReadBit() : 0;
-    reset_frame_context_ = error_resilient_mode_ ? 0 : VpxReadLiteral(2);
-    if (intra_only_) {
-      if (!ValidateVp9SyncCode()) {
-        fprintf(stderr, "Invalid Sync code!\n");
-        return false;
-      }
-
-      if (profile_ > 0) {
-        ParseColorSpace();
-      } else {
-        // NOTE: The intra-only frame header does not include the specification
-        // of either the color format or color sub-sampling in profile 0. VP9
-        // specifies that the default color format should be YUV 4:2:0 in this
-        // case (normative).
-        color_space_ = kVpxCsBt601;
-        color_range_ = kVpxCrStudioRange;
-        subsampling_y_ = subsampling_x_ = 1;
-        bit_depth_ = 8;
-      }
-
-      refresh_frame_flags_ = VpxReadLiteral(kRefFrames);
-      ParseFrameResolution();
-    } else {
-      refresh_frame_flags_ = VpxReadLiteral(kRefFrames);
-      for (int i = 0; i < kRefsPerFrame; ++i) {
-        VpxReadLiteral(kRefFrames_LOG2);  // Consume ref.
-        ReadBit();  // Consume ref sign bias.
-      }
-
-      bool found = false;
-      for (int i = 0; i < kRefsPerFrame; ++i) {
-        if (ReadBit()) {
-          // Found previous reference, width and height did not change since
-          // last frame.
-          found = true;
-          break;
-        }
-      }
-
-      if (!found)
-        ParseFrameResolution();
-    }
+  profile_ = fields.profile;
+  show_existing_frame_ = fields.show_existing;
+  key_ = fields.key;
+  // Historical behavior: show_existing frames do not report altref; other
+  // frames report the inverse of show_frame.
+  altref_ = fields.show_existing ? 0 : !fields.show_frame;
+  error_resilient_mode_ = fields.error_resilient_mode;
+  intra_only_ = fields.intra_only;
+  reset_frame_context_ = fields.reset_frame_context;
+  // SetFrame() historically reset these fields on every parse, so they take
+  // the (possibly zero) values from |fields| even when the header omits them.
+  color_space_ = fields.color_space;
+  color_range_ = fields.color_range;
+  subsampling_x_ = fields.subsampling_x;
+  subsampling_y_ = fields.subsampling_y;
+  refresh_frame_flags_ = fields.refresh_frame_flags;
+  // bit_depth_ historically persisted unless a color config was parsed.
+  if (fields.has_color_config)
+    bit_depth_ = fields.bit_depth;
+  if (fields.has_frame_size) {
+    width_ = fields.width;
+    height_ = fields.height;
   }
+  if (fields.has_render_size) {
+    display_width_ = fields.display_width;
+    display_height_ = fields.display_height;
+  }
+  if (fields.has_frame_parallel_mode)
+    frame_parallel_mode_ = fields.frame_parallel_mode;
+  if (fields.has_tile_info) {
+    row_tiles_ = fields.row_tiles;
+    column_tiles_ = fields.column_tiles;
+  }
+  bit_offset_ = reader.bit_position();
   return true;
-}
-
-int Vp9HeaderParser::ReadBit() {
-  const size_t off = bit_offset_;
-  const size_t byte_offset = off >> 3;
-  const int bit_shift = 7 - static_cast<int>(off & 0x7);
-  if (byte_offset < frame_size_) {
-    const int bit = (frame_[byte_offset] >> bit_shift) & 1;
-    bit_offset_++;
-    return bit;
-  } else {
-    return 0;
-  }
-}
-
-int Vp9HeaderParser::VpxReadLiteral(int bits) {
-  int value = 0;
-  for (int bit = bits - 1; bit >= 0; --bit)
-    value |= ReadBit() << bit;
-  return value;
-}
-
-bool Vp9HeaderParser::ValidateVp9SyncCode() {
-  const int sync_code_0 = VpxReadLiteral(8);
-  const int sync_code_1 = VpxReadLiteral(8);
-  const int sync_code_2 = VpxReadLiteral(8);
-  return (sync_code_0 == 0x49 && sync_code_1 == 0x83 && sync_code_2 == 0x42);
-}
-
-void Vp9HeaderParser::ParseColorSpace() {
-  bit_depth_ = 0;
-  if (profile_ >= 2)
-    bit_depth_ = ReadBit() ? 12 : 10;
-  else
-    bit_depth_ = 8;
-  color_space_ = VpxReadLiteral(3);
-  if (color_space_ != kVpxCsSrgb) {
-    color_range_ = ReadBit();
-    if (profile_ == 1 || profile_ == 3) {
-      subsampling_x_ = ReadBit();
-      subsampling_y_ = ReadBit();
-      ReadBit();
-    } else {
-      subsampling_y_ = subsampling_x_ = 1;
-    }
-  } else {
-    color_range_ = kVpxCrFullRange;
-    if (profile_ == 1 || profile_ == 3) {
-      subsampling_y_ = subsampling_x_ = 0;
-      ReadBit();
-    }
-  }
-}
-
-void Vp9HeaderParser::ParseFrameResolution() {
-  width_ = VpxReadLiteral(16) + 1;
-  height_ = VpxReadLiteral(16) + 1;
-  if (ReadBit()) {
-    display_width_ = VpxReadLiteral(16) + 1;
-    display_height_ = VpxReadLiteral(16) + 1;
-  } else {
-    display_width_ = width_;
-    display_height_ = height_;
-  }
-}
-
-void Vp9HeaderParser::ParseFrameParallelMode() {
-  if (!error_resilient_mode_) {
-    ReadBit();  // Consume refresh frame context
-    frame_parallel_mode_ = ReadBit();
-  } else {
-    frame_parallel_mode_ = 1;
-  }
-}
-
-void Vp9HeaderParser::ParseTileInfo() {
-  VpxReadLiteral(2);  // Consume frame context index
-
-  // loopfilter
-  VpxReadLiteral(6);  // Consume filter level
-  VpxReadLiteral(3);  // Consume sharpness level
-
-  const bool mode_ref_delta_enabled = ReadBit();
-  if (mode_ref_delta_enabled) {
-    const bool mode_ref_delta_update = ReadBit();
-    if (mode_ref_delta_update) {
-      const int kMaxRefLFDeltas = 4;
-      for (int i = 0; i < kMaxRefLFDeltas; ++i) {
-        if (ReadBit())
-          VpxReadLiteral(7);  // Consume ref_deltas + sign
-      }
-
-      const int kMaxModeDeltas = 2;
-      for (int i = 0; i < kMaxModeDeltas; ++i) {
-        if (ReadBit())
-          VpxReadLiteral(7);  // Consume mode_delta + sign
-      }
-    }
-  }
-
-  // quantization
-  VpxReadLiteral(8);  // Consume base_q
-  SkipDeltaQ();  // y dc
-  SkipDeltaQ();  // uv ac
-  SkipDeltaQ();  // uv dc
-
-  // segmentation
-  const bool segmentation_enabled = ReadBit();
-  if (!segmentation_enabled) {
-    const int aligned_width = AlignPowerOfTwo(width_, kMiSizeLog2);
-    const int mi_cols = aligned_width >> kMiSizeLog2;
-    const int aligned_mi_cols = AlignPowerOfTwo(mi_cols, kMiSizeLog2);
-    const int sb_cols = aligned_mi_cols >> 3;  // to_sbs(mi_cols);
-    int min_log2_n_tiles, max_log2_n_tiles;
-
-    for (max_log2_n_tiles = 0;
-         (sb_cols >> max_log2_n_tiles) >= kMinTileWidthB64;
-         max_log2_n_tiles++) {
-    }
-    max_log2_n_tiles--;
-    if (max_log2_n_tiles < 0)
-      max_log2_n_tiles = 0;
-
-    for (min_log2_n_tiles = 0; (kMaxTileWidthB64 << min_log2_n_tiles) < sb_cols;
-         min_log2_n_tiles++) {
-    }
-
-    // columns
-    const int max_log2_tile_cols = max_log2_n_tiles;
-    const int min_log2_tile_cols = min_log2_n_tiles;
-    int max_ones = max_log2_tile_cols - min_log2_tile_cols;
-    int log2_tile_cols = min_log2_tile_cols;
-    while (max_ones-- && ReadBit())
-      log2_tile_cols++;
-
-    // rows
-    int log2_tile_rows = ReadBit();
-    if (log2_tile_rows)
-      log2_tile_rows += ReadBit();
-
-    row_tiles_ = 1 << log2_tile_rows;
-    column_tiles_ = 1 << log2_tile_cols;
-  }
-}
-
-void Vp9HeaderParser::SkipDeltaQ() {
-  if (ReadBit())
-    VpxReadLiteral(4);
-}
-
-int Vp9HeaderParser::AlignPowerOfTwo(int value, int n) {
-  return (((value) + ((1 << (n)) - 1)) & ~((1 << (n)) - 1));
 }
 
 }  // namespace vp9_parser

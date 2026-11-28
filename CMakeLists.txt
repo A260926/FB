@@ -76,7 +76,10 @@ set(libwebm_common_sources
     "${LIBWEBM_SRC_DIR}/common/file_util.cc"
     "${LIBWEBM_SRC_DIR}/common/file_util.h"
     "${LIBWEBM_SRC_DIR}/common/hdr_util.cc"
-    "${LIBWEBM_SRC_DIR}/common/hdr_util.h")
+    "${LIBWEBM_SRC_DIR}/common/hdr_util.h"
+    "${LIBWEBM_SRC_DIR}/common/vp9_syntax.h"
+    "${LIBWEBM_SRC_DIR}/common/vp9_tiles.cc"
+    "${LIBWEBM_SRC_DIR}/common/vp9_tiles.h")
 
 set(mkvmuxer_public_headers
     "${LIBWEBM_SRC_DIR}/mkvmuxer/mkvmuxer.h"
@@ -119,6 +122,7 @@ set(vp9_header_parser_tests_sources
     "${LIBWEBM_SRC_DIR}/common/vp9_header_parser_test.cc"
     "${LIBWEBM_SRC_DIR}/common/vp9_header_parser.cc"
     "${LIBWEBM_SRC_DIR}/common/vp9_header_parser.h"
+    "${LIBWEBM_SRC_DIR}/common/vp9_syntax.h"
     "${LIBWEBM_SRC_DIR}/testing/test_util.cc"
     "${LIBWEBM_SRC_DIR}/testing/test_util.h")
 
@@ -128,6 +132,7 @@ set(vp9_level_stats_tests_sources
     "${LIBWEBM_SRC_DIR}/common/vp9_level_stats_test.cc"
     "${LIBWEBM_SRC_DIR}/common/vp9_level_stats.cc"
     "${LIBWEBM_SRC_DIR}/common/vp9_level_stats.h"
+    "${LIBWEBM_SRC_DIR}/common/vp9_syntax.h"
     "${LIBWEBM_SRC_DIR}/testing/test_util.cc"
     "${LIBWEBM_SRC_DIR}/testing/test_util.h")
 
@@ -297,6 +302,7 @@ set(webm_info_sources
     "${LIBWEBM_SRC_DIR}/common/indent.h"
     "${LIBWEBM_SRC_DIR}/common/vp9_header_parser.cc"
     "${LIBWEBM_SRC_DIR}/common/vp9_header_parser.h"
+    "${LIBWEBM_SRC_DIR}/common/vp9_syntax.h"
     "${LIBWEBM_SRC_DIR}/common/vp9_level_stats.cc"
     "${LIBWEBM_SRC_DIR}/common/vp9_level_stats.h"
     "${LIBWEBM_SRC_DIR}/common/webm_constants.h"
