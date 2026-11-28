@@ -58,6 +58,13 @@ void cm_set_lock(cm_EventHandler lock);
 void cm_set_master_gain(double gain);
 void cm_process(cm_Int16 *dst, int len);
 
+int cm_configure_limiter(int lookahead_frames, int ceiling, int release_frames);
+int cm_set_limiter_parameters(int ceiling, int release_frames);
+int cm_get_limiter_latency(void);
+double cm_get_limiter_gain(void);
+void cm_reset_limiter(void);
+void cm_disable_limiter(void);
+
 cm_Source* cm_new_source(const cm_SourceInfo *info);
 cm_Source* cm_new_source_from_file(const char *filename);
 cm_Source* cm_new_source_from_mem(void *data, int size);

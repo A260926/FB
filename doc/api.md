@@ -1,6 +1,7 @@
 
 # cmixer API
 * [Functions](#functions)
+* [Limiter](#limiter)
 * [Events](#events)
 
 
@@ -11,7 +12,8 @@ Returns and clears the last error. Returns NULL if there is no error.
 
 ##### void cm_init(int samplerate)
 Initializes the library — this must be called before any other function is used.
-`samplerate` should be the samplerate used by your output device.
+`samplerate` should be the samplerate used by your output device. It must only
+be called when no sources are alive and the limiter is disabled.
 
 ##### void cm_set_lock(cm_EventHandler lock)
 Sets a lock event handler. A lock handler must be set if the library will be
@@ -92,6 +94,61 @@ position, calling `cm_play()` will continue playing where it left off.
 
 ##### void cm_stop(cm_Source \*src)
 Stops playing and rewinds the stream's play position back to the beginning.
+While the limiter is enabled this also withdraws the source's contributions
+that are still queued inside the limiter's delay line.
+
+
+## Limiter
+An optional stereo-linked lookahead limiter can be inserted after the master
+gain and before the final 16-bit quantization. While enabled, `cm_process()`
+delays its output by `lookahead_frames` frames so that peaks can be
+attenuated before they arrive; both channels share one gain. All limiter
+control functions — like the source controls — must be called from the same
+thread that drives `cm_process()`, between two `cm_process()` calls, and
+must not be called from source event callbacks.
+
+##### int cm_configure_limiter(int lookahead_frames, int ceiling, int release_frames)
+Enables the limiter or replaces its configuration. `lookahead_frames` is the
+lookahead and output latency in frames (1..65536), `ceiling` is the maximum
+absolute output sample in int16 units (1..32767), and `release_frames`
+(>= 1) sets how fast the gain recovers after a peak: by `1/release_frames`
+per output frame. Returns 1 on success and 0 on failure (see
+`cm_get_error()`). On success all queued PCM and the gain envelope are
+discarded — output restarts with `lookahead_frames` frames of silence. On
+failure the previous configuration, queued audio and gain history are kept.
+
+##### int cm_set_limiter_parameters(int ceiling, int release_frames)
+Changes the ceiling and release time at runtime; the new values take effect
+from the next output frame. Queued PCM, peak history and the current gain
+are preserved. Returns 1 if the limiter is enabled and both parameters are
+valid, 0 otherwise (the state is left unchanged).
+
+##### int cm_get_limiter_latency(void)
+Returns the latency introduced by the limiter, in output frames. Returns 0
+when the limiter is disabled.
+
+##### double cm_get_limiter_gain(void)
+Returns the gain that was applied to the most recent output frame. This is
+1 before any output frame has been produced.
+
+##### void cm_reset_limiter(void)
+Clears the limiter's delay line and gain history; the configuration and all
+source positions are kept.
+
+##### void cm_disable_limiter(void)
+Disables the limiter and releases its state. Queued (not yet emitted) PCM
+is dropped and `cm_process()` immediately returns to the classic path.
+
+Notes:
+* While the limiter is enabled, `cm_stop()` and `cm_destroy_source()`
+  withdraw the source's not-yet-emitted contributions; natural EOF and
+  `cm_pause()` do not — queued audio keeps being delivered.
+* After the last source has ended, keep calling `cm_process()` for
+  `cm_get_limiter_latency()` more frames to flush the tail.
+* `cm_process(NULL, 0)` is allowed while the limiter is enabled and does
+  not advance its state.
+* `cm_set_master_gain()` only affects audio that enters the delay line
+  afterwards; already queued PCM is not re-amplified.
 
 
 ## Events
