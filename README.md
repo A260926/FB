@@ -45,6 +45,7 @@ libaribcaption is a cross-platform library that works on various platforms, incl
 - Zero third-party dependencies on Windows (using DirectWrite) and macOS / iOS (using CoreText)
 - Built-in font fallback mechanism
 - Built-in DRCS converting table for replacing / rendering known DRCS characters into / by alternative Unicode
+- Caption encoder for re-emitting edited captions as ARIB STD-B24 packets
 
 ## Build
 CMake 3.28+ and a C++17 compatible compiler will be necessary for building. Usually you just have to:
@@ -149,6 +150,77 @@ gcc main.c -o main `pkg-config --cflags --libs --static libaribcaption`
 # Link to libaribcaption shared library
 gcc main.c -o main `pkg-config --cflags --libs libaribcaption`
 ```
+
+## Encoding captions
+
+`aribcaption::Encoder` (declared in `aribcaption/encoder.hpp`) performs the
+reverse of `Decoder`: it turns an edited `Caption` back into ARIB STD-B24
+caption packets. It is designed to be reused across calls; DRCS glyph
+definitions are cached until `Reset()` is invoked.
+
+```cpp
+#include <aribcaption/encoder.hpp>
+
+aribcaption::Encoder encoder;
+std::vector<aribcaption::EncodedPES> packets;
+
+if (!encoder.Encode(caption, packets)) {
+    // unsupported properties or packet too large; packets/encoder unchanged
+}
+
+for (const auto& packet : packets) {
+    // packet.pts  - inherited from caption.pts (PTS_NOPTS preserved)
+    // packet.data - starts with 80 FF F0, no outer MPEG-TS / PES start code
+}
+```
+
+On the first successful call after construction (or `Reset()`) the output is a
+Japanese caption management packet followed by a statement packet; later calls
+emit only a statement. Every statement starts with a clear-screen and describes
+a complete screen. On failure both the output vector and the encoder's internal
+state are left untouched, so a retry behaves exactly like a never-failed
+encoder.
+
+Supported subset:
+
+- Japanese JIS encoding (`kARIB_STD_B24_JIS`), first language, Profile A
+- 960x540 full-screen plane
+- 36x36 characters, horizontal spacing 4, vertical spacing 24, scale 1.0
+- transparent background, opaque text colors from palette 0 (indexes 0-7)
+- no ruby, no decorations (bold / italic / underline / stroke / enclosure),
+  no built-in sound
+- DRCS-1 glyphs: width/height 1..64, depth 2 or 4, exact `depth_bits`, compact
+  MSB-first pixels; 94-slot cache shared across calls
+- non-negative character positions whose 40x60 box lies fully inside the plane
+
+`EncodedPES::data` is a complete data group with a CRC-16 (0x1021, init 0xFFFF,
+no reflection, no final XOR) covering the group header through the body. A
+single group's payload may not exceed 65535 bytes; otherwise `Encode()` fails.
+
+See `examples/caption_encode.cpp` for a complete write/decode example:
+
+```bash
+# Write two captions reusing one DRCS bitmap into a simple PES-like container
+./caption_encode captured.pes
+
+# Decode the container in a separate process with Decoder (no re-encoding)
+./caption_encode --decode captured.pes
+```
+
+The container stores, per packet, an 8-byte big-endian signed PTS, a 4-byte
+big-endian length, and the packet bytes.
+
+The encoder round-trip tests live in `test/encode/roundtrip.cpp` and are run
+through the task harness:
+
+```bash
+bash task_support/run.sh target
+```
+
+The `target` mode builds the library, compiles `src/encoder/encoder.cpp` and
+`examples/caption_encode.cpp`, runs the example's write and `--decode` modes,
+and executes the `mapping`, `dictionary`, `rollback` and `wire` test groups
+along with the original decoder baseline.
 
 ## Documents
 See the comments in [public headers](include/aribcaption), and [sample code with ffmpeg](test/ffmpeg)
