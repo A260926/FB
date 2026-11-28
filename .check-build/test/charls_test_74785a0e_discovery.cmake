@@ -1,0 +1,20 @@
+include("/opt/homebrew/share/cmake/Modules/GoogleTestAddTests.cmake")
+gtest_discover_tests_impl(
+  TEST_TARGET [==[charls-test]==]
+  TEST_EXECUTABLE [==[/Volumes/UserFBWorkspace/questions/FSFE895A4B656CU6060/attempts/20261127T160801599810Z/repo/.check-build/test/charls-test]==]
+  TEST_EXECUTOR [==[]==]
+  TEST_WORKING_DIR [==[/Volumes/UserFBWorkspace/questions/FSFE895A4B656CU6060/attempts/20261127T160801599810Z/repo/.check-build/test]==]
+  TEST_EXTRA_ARGS [==[]==]
+  TEST_PROPERTIES [==[]==]
+  TEST_PREFIX [==[]==]
+  TEST_SUFFIX [==[]==]
+  TEST_FILTER [==[]==]
+  NO_PRETTY_TYPES [==[FALSE]==]
+  NO_PRETTY_VALUES [==[FALSE]==]
+  TEST_LIST [==[charls-test_TESTS]==]
+  CTEST_FILE [==[/Volumes/UserFBWorkspace/questions/FSFE895A4B656CU6060/attempts/20261127T160801599810Z/repo/.check-build/test/charls_test_74785a0e_tests.cmake]==]
+  TEST_DISCOVERY_TIMEOUT [==[5]==]
+  TEST_DISCOVERY_EXTRA_ARGS [==[]==]
+  TEST_XML_OUTPUT_DIR [==[]==]
+  TEST_JSON_OUTPUT_DIR [==[/Volumes/UserFBWorkspace/questions/FSFE895A4B656CU6060/attempts/20261127T160801599810Z/repo/.check-build/test]==]
+)

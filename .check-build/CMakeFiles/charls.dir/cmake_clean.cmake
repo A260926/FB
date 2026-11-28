@@ -1,0 +1,33 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/charls.dir/cmake_pch.hxx.pch"
+  "CMakeFiles/charls.dir/cmake_pch.hxx.pch.d"
+  "CMakeFiles/charls.dir/src/charls_jpegls_decoder.cpp.o"
+  "CMakeFiles/charls.dir/src/charls_jpegls_decoder.cpp.o.d"
+  "CMakeFiles/charls.dir/src/charls_jpegls_encoder.cpp.o"
+  "CMakeFiles/charls.dir/src/charls_jpegls_encoder.cpp.o.d"
+  "CMakeFiles/charls.dir/src/golomb_lut.cpp.o"
+  "CMakeFiles/charls.dir/src/golomb_lut.cpp.o.d"
+  "CMakeFiles/charls.dir/src/jpeg_stream_reader.cpp.o"
+  "CMakeFiles/charls.dir/src/jpeg_stream_reader.cpp.o.d"
+  "CMakeFiles/charls.dir/src/jpeg_stream_writer.cpp.o"
+  "CMakeFiles/charls.dir/src/jpeg_stream_writer.cpp.o.d"
+  "CMakeFiles/charls.dir/src/jpegls_error.cpp.o"
+  "CMakeFiles/charls.dir/src/jpegls_error.cpp.o.d"
+  "CMakeFiles/charls.dir/src/jpegls_stream_decoder.cpp.o"
+  "CMakeFiles/charls.dir/src/jpegls_stream_decoder.cpp.o.d"
+  "CMakeFiles/charls.dir/src/make_scan_codec.cpp.o"
+  "CMakeFiles/charls.dir/src/make_scan_codec.cpp.o.d"
+  "CMakeFiles/charls.dir/src/quantization_lut.cpp.o"
+  "CMakeFiles/charls.dir/src/quantization_lut.cpp.o.d"
+  "CMakeFiles/charls.dir/src/validate_spiff_header.cpp.o"
+  "CMakeFiles/charls.dir/src/validate_spiff_header.cpp.o.d"
+  "CMakeFiles/charls.dir/src/version.cpp.o"
+  "CMakeFiles/charls.dir/src/version.cpp.o.d"
+  "libcharls.a"
+  "libcharls.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/charls.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

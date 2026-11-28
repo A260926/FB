@@ -86,6 +86,70 @@ For other platforms, more install options, how to build from source, and more, t
 
 Once you have the library, the sample folder provides some code samples to get you started.
 
+### Incremental row-by-row decoding
+
+For pipelines that receive JPEG-LS data in small intervals and consume one pixel line at a time, CharLS provides
+`charls::jpegls_stream_decoder`. It accepts arbitrary input intervals, returns one complete row per `row_ready` result,
+and verifies the EOI marker before reporting `done`. The decoder only retains the current and previous line, so its
+memory use depends on the row width, component count and bit depth, not on the image height.
+
+`consumed` is the prefix of the supplied interval that the decoder accepted. The caller advances by that amount and
+resubmits the unconsumed suffix on the next call. The interval that reaches the end of the input must be passed with
+`final = true`; when a row is returned first, continue submitting the remaining bytes (or empty intervals) with
+`final = true` until `done` or an error is reported.
+
+```cpp
+#include <charls/charls.hpp>
+#include <charls/jpegls_stream_decoder.hpp>
+
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <vector>
+
+// Example: decode a row-by-row image from fixed-size compressed intervals.
+void decode_incrementally(const std::vector<std::byte>& compressed)
+{
+    charls::jpegls_stream_decoder decoder;
+
+    size_t offset{};
+    while (true)
+    {
+        const size_t remaining{compressed.size() - offset};
+        const size_t interval{std::min<size_t>(4096, remaining)};
+        const bool final{offset + interval == compressed.size()};
+
+        const charls::stream_decode_result result{
+            decoder.push(interval == 0 ? nullptr : compressed.data() + offset, interval, final)};
+        offset += result.consumed;
+
+        if (result.status == charls::stream_decode_status::row_ready)
+        {
+            const auto [row_data, row_size]{decoder.row()};
+            // Process exactly one pixel line. row_data stays valid until the next push() or reset().
+            std::cout << "row bytes: " << row_size << '\n';
+            static_cast<void>(row_data);
+        }
+        else if (result.status == charls::stream_decode_status::done)
+        {
+            break;
+        }
+        else if (result.consumed == 0 && result.status == charls::stream_decode_status::need_input)
+        {
+            // The interval was accepted but not enough data is available for the next complete row.
+            // Resubmit the unconsumed suffix (here: nothing) on the next iteration.
+        }
+    }
+
+    // Objects can be reused for another image after reset().
+    decoder.reset();
+}
+```
+
+The frame header becomes available through `frame_info()` once the start-of-frame segment has been read; calling it
+earlier throws `charls::jpegls_errc::invalid_operation`, as does calling `row()` when the last result was not
+`row_ready`.
+
 ## Release Management
 
 This repository is provided as source code, and specifically does not offer binary releases. Instead, it is encouraged to either “live at head” (build from the latest version of or, if necessary, build against a known, supported branch, known as a Long Term Support (LTS) branch.
