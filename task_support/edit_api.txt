@@ -1,0 +1,20 @@
+/* Public C declarations required in mikktspace_edit.h, include <stddef.h>. */
+typedef struct { int count; float position[4][3], normal[4][3], uv[4][2]; } MikkEditFace;
+typedef struct { float tangent[3],bitangent[3],mag_s,mag_t; int orientation; } MikkEditTangent;
+typedef struct { int face; MikkEditFace value; } MikkEditUpdate;
+typedef struct {
+ size_t evaluated_count,published_count;
+ const int *evaluated_faces,*published_faces;
+} MikkEditStats;
+typedef struct {
+ void *userdata;
+ void *(*allocate)(void*,size_t);
+ void (*release)(void*,void*);
+} MikkEditAllocator;
+typedef struct MikkEditSession MikkEditSession;
+MikkEditSession *mikk_edit_create(int face_count,const MikkEditFace*,
+ float angular_threshold,const MikkEditAllocator*); /* NULL allocator => libc */
+int mikk_edit_update(MikkEditSession*,const MikkEditUpdate*,size_t count);
+int mikk_edit_get(const MikkEditSession*,int face,int corner,MikkEditTangent*);
+const MikkEditStats *mikk_edit_last_update(const MikkEditSession*);
+void mikk_edit_free(MikkEditSession*);
