@@ -31,6 +31,8 @@ freely, subject to the following restrictions:
 
 #include <memory>
 #include <vector>
+#include <array>
+#include <cstdint>
 
 class VoxelData;
 
@@ -51,6 +53,23 @@ public:
 
     void save(const char *path);
     bool raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 &normal, float &t);
+
+    /*
+       Box brush on an integer grid of side N = 2^gridDepth (1 <= gridDepth <= 20).
+       Grid coordinate k maps to normalized scene coordinate 1 + k/N and the box is
+       half open: [lo, hi) on every axis. Cells inside are overwritten with material
+       (0 erases), cells outside are untouched. Different calls may use different
+       grid depths; the brush only relocates existing content, it never resamples it.
+       Works on trees loaded from descriptor files without any VoxelData attached.
+    */
+    void paintBox(unsigned gridDepth,
+                  const std::array<uint32, 3> &lo, const std::array<uint32, 3> &hi,
+                  uint32 material);
+
+    /* Number of descriptor words currently held by the octree. */
+    uint64 wordCount() const {
+        return _octreeSize;
+    }
 
     Vec3 center() const {
         return _center;

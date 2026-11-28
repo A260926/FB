@@ -278,8 +278,26 @@ bool VoxelOctree::raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 
                 if (current & 0x20000)
                     childOffset = (childOffset << 32) | uint64(_octree[parent + 1]);
 
+                /*
+                   Locate the selected child inside a group that may mix leaf records
+                   (one word) and internal descriptors (one word, plus an extra address
+                   word in a double-wide group). Children are stored in descending index
+                   order, so first count the present children with a higher index, then
+                   add one extra word for each such internal child when the group uses
+                   extended addresses. Reduces to slot*width for uniform groups.
+                */
+                int childIndex = idx ^ octantMask;
+                uint32 present = (current >> 8) & 0xFF;
+                uint32 higherIndex = present & ((1u << (7 - childIndex)) - 1);
+                int slot = BitCount[higherIndex];
+                int wordPos = slot;
+                if (current & 0x10000)
+                    wordPos += BitCount[higherIndex & (current & 0xFF)];
+
+                uint64 childWord = parent + childOffset + wordPos;
+
                 if (!(childMasks & 0x80)) {
-                    normal = _octree[childOffset + parent + BitCount[((childMasks >> (8 + childShift)) << childShift) & 127]];
+                    normal = _octree[childWord];
 
                     break;
                 }
@@ -287,10 +305,7 @@ bool VoxelOctree::raymarch(const Vec3 &o, const Vec3 &d, float rayScale, uint32 
                 rayStack[scale].offset = parent;
                 rayStack[scale].maxT = maxT;
 
-                uint32 siblingCount = BitCount[childMasks & 127];
-                parent += childOffset + siblingCount;
-                if (current & 0x10000)
-                    parent += siblingCount;
+                parent = childWord;
 
                 idx = 0;
                 scale--;
