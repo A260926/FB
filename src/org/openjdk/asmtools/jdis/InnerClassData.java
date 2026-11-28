@@ -43,7 +43,7 @@ public class InnerClassData extends Element<ClassData> implements Measurable {
     int access;
 
     private int calculatedCommentOffset = 0;
-    private String jasmPrefix = Indent(PadRight(INNERCLASS.parseKey(), TABLE_PADDING));
+    private String jasmPrefix = Indent(PadRight(INNERCLASS.parseKey(), getTablePadding()));
 
     public InnerClassData(ClassData classData, Container<InnerClassData, ClassData> container) {
         super(classData, container);
@@ -91,7 +91,7 @@ public class InnerClassData extends Element<ClassData> implements Measurable {
                 print(owner.pool.ConstantStrValue(inner_class_info_index));
             if (outer_class_info_index != 0)
                 print(format(" of %s", owner.pool.ConstantStrValue(outer_class_info_index)));
-            println(owner.printCPIndex && !skipComments ? "" : ";");
+            println(printCPIndex && !skipComments ? "" : ";");
         } else {
             println();
         }
@@ -122,7 +122,7 @@ public class InnerClassData extends Element<ClassData> implements Measurable {
                 print(owner.pool.ConstantStrValue(inner_class_info_index));
             if (outer_class_info_index != 0)
                 print(format(" of %s", owner.pool.ConstantStrValue(outer_class_info_index)));
-            println(owner.printCPIndex && !skipComments ? "" : ";");
+            println(printCPIndex && !skipComments ? "" : ";");
         } else {
             println();
         }

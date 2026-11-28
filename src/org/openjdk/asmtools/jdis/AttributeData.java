@@ -64,7 +64,7 @@ public abstract class AttributeData<A extends AttributeData<A>> extends Indenter
             println((name != null) ? " // %s".formatted(name) : "");
 
     protected AttributeData(ClassData classData, TableFormatModel.Token token) {
-        super(classData.toolOutput);
+        super(classData.toolOutput, classData.options);
         pool = classData.pool;
         logger = classData.data.environment.getLogger();
         tableToken = token;

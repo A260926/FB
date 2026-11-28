@@ -101,7 +101,7 @@ public class ConstantPool extends Indenter {
     }
 
     public ConstantPool(ClassData classData, int size) {
-        super(classData.toolOutput);
+        super(classData.toolOutput, classData.options);
         this.classData = classData;
         this.environment = classData.environment;
         tableToken = CONSTANT_POOL;
@@ -535,7 +535,7 @@ public class ConstantPool extends Indenter {
     }
 
     public int getCommentPadding() {
-        return max(COMMENT_PADDING, tagPadding);
+        return max(commentPadding, tagPadding);
     }
 
     public List<IOException> getIssues() {
@@ -701,7 +701,7 @@ public class ConstantPool extends Indenter {
         protected final T value;
         private final List<IOException> issues = new ArrayList<>();
         // comment shift is used by the print method
-        protected int commentPadding = Indenter.COMMENT_PADDING;
+        protected int commentPadding = getCommentPadding();
 
         public Constant(TAG tag, T value) {
             this.tag = tag;

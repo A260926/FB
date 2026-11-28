@@ -93,13 +93,17 @@ public abstract class MemberData<T extends MemberData> extends Indenter {
     protected ArrayList<AttrData> attributes;
 
     public MemberData(T data) {
-        super(data.toolOutput);
+        super(data.toolOutput, data.options);
         this.environment = data.environment;
         init(data);
     }
 
     public MemberData(Environment environment) {
-        super(environment.getToolOutput());
+        this(environment, Options.legacySnapshot());
+    }
+
+    public MemberData(Environment environment, Options options) {
+        super(environment.getToolOutput(), options);
         this.environment = environment;
     }
 

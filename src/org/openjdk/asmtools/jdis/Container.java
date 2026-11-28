@@ -36,6 +36,7 @@ public class Container<T extends Indenter, M extends MemberData<?>> extends Inde
     protected M owner;
 
     public Container(M owner, Class<T> elementClass, int initialCapacity) {
+        super(owner.toolOutput, owner.options);
         this.owner = owner;
         this.elements = new ArrayList<>(initialCapacity);
         this.tableToken = TableFormatModel.Token.getBy(elementClass);

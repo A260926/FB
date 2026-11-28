@@ -78,9 +78,9 @@ public class LineNumberData extends Indenter {
      * @throws IOException if an I/O error occurs during construction
      */
     public LineNumberData(DataInputStream in, MethodData methodData) throws IOException {
+        super(methodData.toolOutput, methodData.options);
         start_pc = in.readShort();
         line_number = in.readShort();
-        super.toolOutput = methodData.toolOutput;
         int n = methodData.printProgramCounter ? PROGRAM_COUNTER_PLACEHOLDER_LENGTH + 4 : INSTR_PREFIX_LENGTH + 2;
         format = "%" + n + "s %4d:  %7d";
     }

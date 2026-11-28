@@ -46,12 +46,12 @@ public abstract class LocalData<M extends MemberData<?>> extends Indenter {
     protected String format;
 
     public LocalData(MemberData<M> owner, DataInputStream in, MethodData methodData, String fieldFacet) throws IOException {
+        super(methodData.toolOutput, methodData.options);
         start_pc = in.readShort();
         length = in.readShort();
         name_cpx = in.readShort();
         sig_cpx = in.readShort();
         slot = in.readShort();
-        super.toolOutput = methodData.toolOutput;
         pool = methodData.getConstantPool();
         int shift = methodData.calculateInlinedTitleShift("Start");
         header = (MessageFormat.format("%{0}s  Length  Slot  Name    %s", shift)).

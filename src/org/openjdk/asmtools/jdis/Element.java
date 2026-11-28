@@ -30,7 +30,7 @@ public class Element<M extends MemberData<?>> extends Indenter {
     protected Container<?, M> container;
 
     public Element(M owner, Container<?, M> container) {
-        super(owner.toolOutput);
+        super(owner.toolOutput, owner.options);
         this.owner = owner;
         this.container = container;
     }

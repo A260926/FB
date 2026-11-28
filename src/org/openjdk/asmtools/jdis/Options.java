@@ -27,21 +27,54 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static java.lang.String.format;
-import static org.openjdk.asmtools.jdis.Indenter.*;
 import static org.openjdk.asmtools.jdis.Options.PrintOption.*;
 
 /**
- * The singleton class to share global options among jdis classes.
+ * A set of jdis printing options.
+ * <p>
+ * Each {@link Main} instance owns one of these objects, so configuring or running a
+ * disassembler never changes the behavior of another one. The historical public static
+ * entry points are kept for compatibility; they operate on a separate process-wide set
+ * that is not consulted by any {@code Main} instance.
  */
 public class Options {
 
     // Initial options correspond to calling the tool without options.
-    static private final EnumSet<PrintOption> PRINT_OPTIONS = EnumSet.of(
+    static private final EnumSet<PrintOption> DEFAULT_OPTIONS = EnumSet.of(
             // default option(s)
             LABELS);
 
-    public static String getPrintOptions() {
-        return PRINT_OPTIONS.stream().map(op -> format("%-26s: \"%s\"", op.name(), op.descriptor)).
+    // Legacy, process-wide option set kept for source/binary compatibility only.
+    static private final Options LEGACY = new Options();
+
+    private final EnumSet<PrintOption> printOptions;
+
+    /**
+     * Creates an option set equivalent to invoking the tool without options.
+     */
+    public Options() {
+        this.printOptions = EnumSet.copyOf(DEFAULT_OPTIONS);
+    }
+
+    /**
+     * Creates a copy of another option set.
+     */
+    public Options(Options original) {
+        this.printOptions = original.printOptions.clone();
+    }
+
+    /**
+     * @return a copy of the legacy global option set.
+     */
+    public static Options legacySnapshot() {
+        return new Options(LEGACY);
+    }
+
+    /**
+     * @return the printable description of this option set.
+     */
+    public String describe() {
+        return printOptions.stream().map(op -> format("%-26s: \"%s\"", op.name(), op.descriptor)).
                 collect(Collectors.joining("\n"));
     }
 
@@ -87,11 +120,29 @@ public class Options {
             this.action = action;
         }
 
+        /**
+         * Applies the option to the legacy global option set.
+         *
+         * @deprecated use {@link #apply(Options)} with an option set owned by the tool.
+         */
+        @Deprecated
         public void apply() {
-            if (this.action != null)
-                action.accept(this);
-            else
-                set(this);
+            apply(LEGACY);
+        }
+
+        /**
+         * Applies the option (expanding a group option) to the supplied option set.
+         */
+        public void apply(Options options) {
+            if (isGroupOption()) {
+                options.enableGroup(this);
+            } else {
+                options.enable(this);
+            }
+        }
+
+        private boolean isGroupOption() {
+            return this == LOCAL_VARIABLE_All || this == LINE_NUMBER_TABLE_All || this == DROP_All;
         }
 
         /**
@@ -144,63 +195,101 @@ public class Options {
             LOCAL_VARIABLE_Types
     );
 
+    // ---------------------------------------------------------------------
+    // Instance API. Every configured Main instance owns its own set.
+    // ---------------------------------------------------------------------
 
-    public static void set(PrintOption val) {
-        if (val == PRINT_BCI) {
-            TABLE_PADDING = OPERAND_PLACEHOLDER_LENGTH + INSTR_PREFIX_LENGTH + 3;
-        }
-        PRINT_OPTIONS.add(val);
+    public void enable(PrintOption val) {
+        printOptions.add(val);
     }
 
-    public static void unset(PrintOption val) {
-        if (val == PRINT_BCI) {
-            TABLE_PADDING = OPERAND_PLACEHOLDER_LENGTH + INSTR_PREFIX_LENGTH + 1;
-        }
-        PRINT_OPTIONS.remove(val);
+    public void disable(PrintOption val) {
+        printOptions.remove(val);
     }
 
-    public static void setDetailedOutputOptions() {
-        set(DETAILED_OUTPUT);
-        unset(PrintOption.LABELS);
-    }
-
-    public static void set(EnumSet<PrintOption> vals) {
+    public void enable(EnumSet<PrintOption> vals) {
         for (PrintOption val : vals) {
-            set(val);
+            enable(val);
         }
     }
 
-    public static void unset(EnumSet<PrintOption> vals) {
+    public void disable(EnumSet<PrintOption> vals) {
         for (PrintOption val : vals) {
-            unset(val);
+            disable(val);
         }
     }
 
-    public static void setGroupOption(PrintOption option) {
+    public void enableDetailedOutput() {
+        enable(DETAILED_OUTPUT);
+        disable(PrintOption.LABELS);
+    }
+
+    public void enableGroup(PrintOption option) {
         switch (option) {
-            case LOCAL_VARIABLE_All -> set(LOCAL_VARIABLE_ALL);
-            case LINE_NUMBER_TABLE_All -> set(LINE_NUMBER_TABLE_ALL);
-            case DROP_All -> set(DROP_ALL);
+            case LOCAL_VARIABLE_All -> enable(LOCAL_VARIABLE_ALL);
+            case LINE_NUMBER_TABLE_All -> enable(LINE_NUMBER_TABLE_ALL);
+            case DROP_All -> enable(DROP_ALL);
             default -> throw new RuntimeException("%s ia not group option".formatted(option.name()));
         }
     }
 
-    public static void setDefaultOutputOptions() {
-        PRINT_OPTIONS.clear();
-        set(PrintOption.LABELS);
+    public void resetToDefaults() {
+        printOptions.clear();
+        enable(PrintOption.LABELS);
     }
 
-    public static boolean contains(PrintOption... vals) {
+    public boolean isEnabled(PrintOption... vals) {
         for (PrintOption val : vals) {
-            if (PRINT_OPTIONS.contains(val)) {
+            if (printOptions.contains(val)) {
                 return true;
             }
         }
         return false;
     }
 
-    public static String asShortString() {
+    public String asShortString() {
         return format("[ %s ]",
-                PRINT_OPTIONS.stream().map(item -> item.name()).collect(Collectors.joining(", ")));
+                printOptions.stream().map(item -> item.name()).collect(Collectors.joining(", ")));
+    }
+
+    // ---------------------------------------------------------------------
+    // Legacy static entry points. They operate on the process-wide legacy set
+    // that is not used by Main instances configured with their own options.
+    // ---------------------------------------------------------------------
+
+    public static String getPrintOptions() {
+        return LEGACY.describe();
+    }
+
+    public static void set(PrintOption val) {
+        LEGACY.enable(val);
+    }
+
+    public static void unset(PrintOption val) {
+        LEGACY.disable(val);
+    }
+
+    public static void setDetailedOutputOptions() {
+        LEGACY.enableDetailedOutput();
+    }
+
+    public static void set(EnumSet<PrintOption> vals) {
+        LEGACY.enable(vals);
+    }
+
+    public static void unset(EnumSet<PrintOption> vals) {
+        LEGACY.disable(vals);
+    }
+
+    public static void setGroupOption(PrintOption option) {
+        LEGACY.enableGroup(option);
+    }
+
+    public static void setDefaultOutputOptions() {
+        LEGACY.resetToDefaults();
+    }
+
+    public static boolean contains(PrintOption... vals) {
+        return LEGACY.isEnabled(vals);
     }
 }

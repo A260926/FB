@@ -73,10 +73,10 @@ public class BootstrapMethodData extends Element<ClassData> {
 
     @Override
     protected void jasmPrint(int index, int size) throws IOException {
-        int commentOffset = getCommentOffset() - TABLE_PADDING;
+        int commentOffset = getCommentOffset() - getTablePadding();
         final BsmInfo bsmInfo = getBsmInfo();
 
-        printIndent(PadRight(BOOTSTRAPMETHOD.parseKey(), TABLE_PADDING));
+        printIndent(PadRight(BOOTSTRAPMETHOD.parseKey(), getTablePadding()));
         if (printCPIndex) {
             if (skipComments) {
                 println("#%d;".formatted(bsmRef));
@@ -88,11 +88,11 @@ public class BootstrapMethodData extends Element<ClassData> {
             }
         } else {
             println(formatOperandLine(
-                    "%s".formatted(bsmInfo.strBsm()), TABLE_PADDING + getIndentStep(), "",
+                    "%s".formatted(bsmInfo.strBsm()), getTablePadding() + getIndentStep(), "",
                     BootstrapMethodBreakPositions)
             );
         }
-        printIndent(PadRight(" ", TABLE_PADDING)).print("{ ");
+        printIndent(PadRight(" ", getTablePadding())).print("{ ");
         if (numBsmArgs > 0) {
             println();
             incIndent(2);
@@ -101,7 +101,7 @@ public class BootstrapMethodData extends Element<ClassData> {
                     int argRef = bsmArguments.get(i);
                     String delim = (i != numBsmArgs - 1) ? "," : "";
                     boolean notLastIdx = i != numBsmArgs - 1;
-                    printIndent(PadRight(" ", TABLE_PADDING));
+                    printIndent(PadRight(" ", getTablePadding()));
                     if (skipComments) {
                         println("#%d%s".formatted(argRef, delim));
                     } else {
@@ -115,12 +115,12 @@ public class BootstrapMethodData extends Element<ClassData> {
                 }
             } else {
                 String strArgs = bsmInfo.cpx2Const().bsmArgsAsString(this);
-                printIndent(PadRight(" ", TABLE_PADDING - getIndentStep())).
-                        println(formatOperandLine(strArgs, TABLE_PADDING + getIndentStep() * 2, "",
+                printIndent(PadRight(" ", getTablePadding() - getIndentStep())).
+                        println(formatOperandLine(strArgs, getTablePadding() + getIndentStep() * 2, "",
                                 BootstrapArgumentsBreakPositions));
             }
             decIndent(2);
-            printIndent(PadRight(" ", TABLE_PADDING));
+            printIndent(PadRight(" ", getTablePadding()));
         }
         println("}");
         if (index < size - 1)

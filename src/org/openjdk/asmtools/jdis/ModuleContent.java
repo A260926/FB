@@ -53,6 +53,7 @@ public final class ModuleContent extends Indenter {
     public final Map<Provided, Set<ModuleContent.TargetType>> provides;
 
     private ModuleContent(Builder builder) {
+        super(builder.options);
         this.header = builder.header;
         this.requires = Collections.unmodifiableSet(builder.requires);
         this.exports = Collections.unmodifiableMap(builder.exports);
@@ -308,9 +309,15 @@ public final class ModuleContent extends Indenter {
             return this.name().compareTo(t.getTypeName());
         }
 
+        private Options options = Options.legacySnapshot();
+
+        void setOptions(Options options) {
+            this.options = options;
+        }
+
         @Override
         public String toString() {
-            return (Options.contains(Options.PrintOption.CP_INDEX)) ? String.format("#%-4d /* %s */", getCPIndex(), name()) : name();
+            return options.isEnabled(Options.PrintOption.CP_INDEX) ? String.format("#%-4d /* %s */", getCPIndex(), name()) : name();
         }
     }
 
@@ -324,6 +331,7 @@ public final class ModuleContent extends Indenter {
         final Set<Uses> uses = new HashSet<>();
         final Map<Provided, Set<ModuleContent.TargetType>> provides = new HashMap<>();
         private Header header;
+        private Options options = Options.legacySnapshot();
         private int moduleFlags = EModifier.ACC_NONE.getFlag();
         private int cpIndex;
         private String moduleName;
@@ -337,6 +345,11 @@ public final class ModuleContent extends Indenter {
             this.moduleFlags = moduleFlags;
             this.moduleName = moduleName;
             this.moduleVersion = moduleVersion;
+        }
+
+        public Builder setOptions(Options options) {
+            this.options = options;
+            return this;
         }
 
         public void setModuleFlags(int moduleFlags) {
@@ -410,7 +423,17 @@ public final class ModuleContent extends Indenter {
          */
         public ModuleContent build() {
             header = new Header(cpIndex, moduleName, moduleFlags, moduleVersion);
-            return new ModuleContent(this);
+            ModuleContent content = new ModuleContent(this);
+            content.header.setOptions(options);
+            content.requires.forEach(t -> t.setOptions(options));
+            content.exports.keySet().forEach(t -> t.setOptions(options));
+            content.exports.values().forEach(set -> set.forEach(t -> t.setOptions(options)));
+            content.opens.keySet().forEach(t -> t.setOptions(options));
+            content.opens.values().forEach(set -> set.forEach(t -> t.setOptions(options)));
+            content.uses.forEach(t -> t.setOptions(options));
+            content.provides.keySet().forEach(t -> t.setOptions(options));
+            content.provides.values().forEach(set -> set.forEach(t -> t.setOptions(options)));
+            return content;
         }
 
         private <T extends TargetType> Builder add(Map<T, Set<ModuleContent.TargetType>> collection, T source, Set<ModuleContent.TargetType> target) {

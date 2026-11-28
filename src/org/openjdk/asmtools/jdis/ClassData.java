@@ -146,10 +146,14 @@ public class ClassData extends MemberData<ClassData> {
     private Path classFile = null;
 
     public <E extends Environment<DecompilerLogger>> ClassData(E environment) {
-        super(environment);
+        this(environment, Options.legacySnapshot());
+    }
+
+    public <E extends Environment<DecompilerLogger>> ClassData(E environment, Options options) {
+        super(environment, options);
         memberType = "ClassData";
         super.environment = environment;
-        environment.traceln("printOptions=" + Options.asShortString());
+        environment.traceln("printOptions=" + this.options.asShortString());
         super.pool = new ConstantPool(this);
         super.init(this);
     }

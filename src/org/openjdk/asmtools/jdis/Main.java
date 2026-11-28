@@ -54,6 +54,9 @@ import static org.openjdk.asmtools.util.ProductInfo.FULL_VERSION;
  */
 public class Main extends JdisTool {
 
+    // The printing options owned by this disassembler instance.
+    private final Options options = new Options();
+
     public Main(ToolOutput toolOutput, DualStreamToolOutput log, ToolInput... toolInputs) {
         super(toolOutput, log);
         Collections.addAll(fileList, toolInputs);
@@ -82,6 +85,13 @@ public class Main extends JdisTool {
         parseArgs(argv);
     }
 
+    /**
+     * @return a snapshot of the options configured for this instance.
+     */
+    public Options getOptions() {
+        return new Options(options);
+    }
+
     // jdis entry point
     public static void main(String... argv) {
         Main disassembler = new Main(new StdoutOutput(), argv);
@@ -106,16 +116,19 @@ public class Main extends JdisTool {
     // Runs disassembler when args already parsed
     public synchronized int disasm() {
         int rc = OK;
+        // Each run uses a snapshot of this instance's options, so nothing observed or
+        // changed by another instance can leak into the output.
+        Options runOptions = new Options(options);
         for (ToolInput toolInput : fileList) {
             ClassData classData = null;
             try {
                 environment.setToolInput(toolInput);
-                classData = new ClassData(environment);
+                classData = new ClassData(environment, runOptions);
                 toolInput.setDetailedInput(classData.isDetailedOutput());
                 try (DataInputStream dis = toolInput.getDataInputStream(Optional.of(environment))) {
                     classData.read(dis, Paths.get(toolInput.getName()));
                 }
-                environment.traceln(() -> "Options:\n%s\n".formatted(Options.getPrintOptions()));
+                environment.traceln(() -> "Options:\n%s\n".formatted(runOptions.describe()));
                 environment.getToolOutput().startClass(classData.className, Optional.of(".jasm"), environment);
                 classData.print();
                 environment.getToolOutput().finishClass(classData.className);
@@ -173,36 +186,37 @@ public class Main extends JdisTool {
     }
 
     @Override
-    protected void parseArgs(String... argv) {
-        Options.setDefaultOutputOptions();
+    protected synchronized void parseArgs(String... argv) {
+        // Re-parsing replaces this instance's configuration; no other instance is affected.
+        options.resetToDefaults();
         // Parse arguments
         for (int i = 0; i < argv.length; i++) {
             String arg = argv[i];
             switch (arg) {
                 case "-g":
-                    Options.setDetailedOutputOptions();
+                    options.enableDetailedOutput();
                     break;
                 case "-v":
-                    Options.set(VERBOSE);
+                    options.enable(VERBOSE);
                     environment.setVerboseFlag(true);
                     break;
                 case "-sysinfo":
-                    Options.set(SYSINFO);
+                    options.enable(SYSINFO);
                     break;
                 case "-t":
-                    Options.set(VERBOSE);
-                    Options.set(TRACE);
+                    options.enable(VERBOSE);
+                    options.enable(TRACE);
                     environment.setVerboseFlag(true);
                     environment.setTraceFlag(true);
                     break;
                 case "-pc":
-                    Options.set(PRINT_BCI);
+                    options.enable(PRINT_BCI);
                     break;
                 case "-nc":
-                    Options.set(NO_COMMENTS);
+                    options.enable(NO_COMMENTS);
                     break;
                 case "-hx":
-                    Options.set(HEX);
+                    options.enable(HEX);
                     break;
                 case "-f":                                          // -f <file>
                     setFSDestination(FILE, ++i, argv);
@@ -227,14 +241,14 @@ public class Main extends JdisTool {
                     usage();
                     System.exit(OK);
                 case "-best-effort":
-                    Options.set(BEST_EFFORT);
+                    options.enable(BEST_EFFORT);
                     break;
                 case "-gg":
-                    Options.setDetailedOutputOptions();
-                    Options.set(EXTRA_DETAILED_Output);
+                    options.enableDetailedOutput();
+                    options.enable(EXTRA_DETAILED_Output);
                     break;
                 case "-table":
-                    Options.set(PrintOption.TABLE);
+                    options.enable(PrintOption.TABLE);
                     break;
                 default:
                     if (arg.startsWith("-")) {
@@ -287,7 +301,7 @@ public class Main extends JdisTool {
                 environment.error("err.option.unsupported", option + ":all");
                 return false;
             }
-            blankOption.apply();
+            blankOption.apply(options);
         } else if (parameters.matches("^[:=-]+.*")) {
             parameters = parameters.substring(1);
             String[] prmArray = parameters.split(",");
@@ -300,7 +314,7 @@ public class Main extends JdisTool {
                     environment.error("err.option.unsupported", "%s:%s".formatted(option, prmArray[i]));
                     return false;
                 }
-                printOption.apply();
+                printOption.apply(options);
                 if (printOption.equals(blankOption)) { // blank options is equal to
                     return true;
                 }

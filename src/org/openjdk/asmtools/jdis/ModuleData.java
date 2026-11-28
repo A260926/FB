@@ -32,14 +32,12 @@ import java.util.Set;
 
 import static org.openjdk.asmtools.jdis.ConstantPool.TAG.CONSTANT_CLASS;
 import static org.openjdk.asmtools.jdis.ConstantPool.TAG.CONSTANT_MODULE;
-import static org.openjdk.asmtools.jdis.Options.PrintOption.CP_INDEX;
 
 /**
  * The module attribute data.
  */
 public class ModuleData extends MemberData<ClassData> {
 
-    protected final boolean printCPIndex = Options.contains(CP_INDEX);
     private ModuleContent moduleContent;
 
     public ModuleData(ClassData classData) {
@@ -107,7 +105,7 @@ public class ModuleData extends MemberData<ClassData> {
             // u2 module_version_index;
             versionIndex = in.readUnsignedShort();
             version = pool.getString(versionIndex, ind -> null);
-            builder = new ModuleContent.Builder(index, moduleName, moduleFlags, version);
+            builder = new ModuleContent.Builder(index, moduleName, moduleFlags, version).setOptions(options);
         } catch (IOException ioe) {
             if (bestEffort) {
                 environment.getLogger().error("err.invalid_header");
