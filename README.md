@@ -123,3 +123,62 @@ The two codec functions are reentrant, so you can code as few samples at a
 time with buffers as small as you want (with some padding).
 ttaR (CLI util) 1.0 did this, but I replaced it with doing the whole frame at
 once in 1.1 because it's a little faster and it simplified the source a bit.
+
+
+## Streaming single-frame decoder
+
+`libttaR_tta_decode()` needs a safety margin of readable bytes after every
+slice, so it cannot be fed raw compressed fragments directly. The streaming
+API decodes one compressed TTA frame straight from arbitrary byte fragments
+with no margin and no internal heap allocation:
+
+```
+size_t      wsz = libttaR_streamdec_size(nchan);
+void       *ws  = aligned_alloc(16, wsz);
+libttaR_streamdec_init(ws, wsz, samplebytes, nchan, sample_frames, frame_bytes);
+
+int rv = libttaR_streamdec_process(ws, src, &bytes, dst, &frames, final);
+```
+
+The workspace is caller supplied, 16-byte aligned, and sized by
+`libttaR_streamdec_size()` (0 for an unsupported channel count). Its size is
+independent of `frame_bytes`, `sample_frames`, and the length of any code
+word. `libttaR_streamdec_init()` validates the parameters, lengths, and
+multiplication overflows and may also be reused to reset an existing
+workspace for another frame.
+
+Input may be cut at any point: in the middle of a unary or binary remainder,
+inside a channel group, or in the middle of the trailing CRC. Half a code
+word is kept in the workspace; a channel's Rice, predictor, and filter state
+is committed only after a whole symbol arrives, and a complete interleaved
+sample frame is emitted only after every channel of the group has arrived.
+The next symbol continues with the correct per-channel history.
+
+### Verification status of delivered PCM
+
+Audio is produced as soon as it can be decoded, which may be *before* the
+four trailing CRC bytes have arrived. Such PCM is therefore **provisional and
+not yet verified**. Only a return value of `1` means the whole frame is
+complete and its CRC matched; treat the frame as verified only then. On any
+error, PCM already reported is not withdrawn, but the workspace enters a
+sticky error state and must be reinitialized before decoding another frame.
+
+### Backpressure and end-of-input
+
+`bytes` and `frames` are capacities on the way in and actual counts on the way
+out. When the output capacity (`*frames`) is zero, `dst` may be `NULL`. A
+decoder that fills its output capacity pauses and returns `0`; this is
+backpressure, never truncation. At most one decoded sample frame is retained
+in the workspace, so it can later be drained with a zero-input call
+(`bytes == 0`).
+
+`final == 1` means no bytes will follow the current slice. End-of-input is
+locked only when the entire offered slice is consumed; an output stall with
+bytes still pending does not lock it. Once locked, a stall that still needs
+input becomes `-2` (frame incomplete), whereas an output stall remains
+drainable. After completion, repeated calls return `1` with both counters
+zero; a sticky stream error repeats its code with both counters zero; an
+illegal call returns `-1`, leaves the state untouched, and zeroes both
+counters. Only bytes inside the declared `frame_bytes` are consumed, so a
+buffer that also contains the next frame never reads past the boundary.
+

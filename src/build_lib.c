@@ -34,5 +34,6 @@
 #include "./lib/2-1_pcm_write.c"
 #include "./lib/3-0_tta_enc.c"
 #include "./lib/3-1_tta_dec.c"
+#include "./lib/3-2_stream_dec.c"
 
 /* EOF //////////////////////////////////////////////////////////////////// */

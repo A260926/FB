@@ -296,6 +296,87 @@ extern uint32_t libttaR_crc32(
 /*@*/
 ;
 
+/* ------------------------------------------------------------------------ */
+
+/* Streaming single-frame decoder.
+ *
+ * Decodes exactly one compressed TTA audio frame (8/16/24-bit, 1..8 channels,
+ * signed int32 interleaved PCM) directly from caller supplied byte slices,
+ * with no per-decode safety margin and no internal heap allocation.
+ *
+ * Workspace lifecycle:
+ *   - allocate libttaR_streamdec_size(nchan) bytes, 16-byte aligned
+ *   - libttaR_streamdec_init() validates the declaration and (re)starts a
+ *     frame; it may also be used to reset an existing workspace
+ *   - feed compressed bytes repeatedly with libttaR_streamdec_process()
+ *
+ * A symbol's Rice/predict/filter state for a channel is committed only once
+ * the whole symbol has arrived, and a complete interleaved sample frame is
+ * emitted only after every channel of the group has been decoded.  Partial
+ * progress across a fragment (half a unary, a partial binary remainder, a
+ * split channel group, or a split CRC) is retained in the workspace.
+ *
+ * PCM may be delivered before the trailing CRC has arrived; only a return of
+ * 1 marks the frame verified.  On error, already reported PCM is not revoked;
+ * reinitialize before decoding another frame.
+ *
+ * Backpressure/end conventions:
+ *   - '*frames' == 0 permits a NULL 'dst'; output capacity that fills up
+ *     pauses decoding (return 0) without being mistaken for truncation, and
+ *     the frame can be drained later with a zero-input call
+ *   - 'final' == 1 locks end-of-input only when the whole offered slice is
+ *     consumed; a stall still needing input then becomes -2
+ *   - after completion (1) repeated calls return 1 with both counters 0;
+ *     a sticky stream error likewise repeats with both counters 0
+ *   - bad parameters leave the state untouched and zero both counters
+**/
+
+#undef nchan
+/*@external@*/ /*@unused@*/
+X_LIBTTAr_ATTRIBUTE_CONST
+extern size_t libttaR_streamdec_size(unsigned int nchan)
+/*@*/
+;
+
+#undef workspace
+#undef workspace_bytes
+#undef samplebytes
+#undef nchan
+#undef sample_frames
+#undef frame_bytes
+/*@external@*/ /*@unused@*/
+extern int libttaR_streamdec_init(
+	/*@reldef@*/ void *X_LIBTTAr_RESTRICT workspace,
+	size_t workspace_bytes,
+	unsigned int samplebytes,
+	unsigned int nchan,
+	size_t sample_frames,
+	size_t frame_bytes
+)
+/*@modifies *workspace@*/
+;
+
+#undef workspace
+#undef src
+#undef bytes
+#undef dst
+#undef frames
+#undef final
+/*@external@*/ /*@unused@*/
+extern int libttaR_streamdec_process(
+	/*@in@*/ void *X_LIBTTAr_RESTRICT workspace,
+	/*@in@*/ const uint8_t *X_LIBTTAr_RESTRICT src,
+	/*@in@*/ size_t *X_LIBTTAr_RESTRICT bytes,
+	/*@reldef@*/ int32_t *X_LIBTTAr_RESTRICT dst,
+	/*@in@*/ size_t *X_LIBTTAr_RESTRICT frames,
+	int final
+)
+/*@modifies *workspace,
+		*bytes,
+		*frames
+@*/
+;
+
 /* //////////////////////////////////////////////////////////////////////// */
 
 #undef X_LIBTTAr_RESTRICT
