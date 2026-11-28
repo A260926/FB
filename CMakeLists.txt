@@ -198,6 +198,8 @@ add_library(aribcaption
         src/decoder/decoder_capi.cpp
         src/decoder/decoder_impl.cpp
         src/decoder/decoder_impl.hpp
+        src/decoder/link_reassembly.cpp
+        src/decoder/link_reassembly.hpp
 )
 
 # Append renderer-related sources if renderer not disabled

@@ -30,6 +30,7 @@
 #include "aribcaption/decoder.hpp"
 #include "base/logger.hpp"
 #include "decoder/b24_codesets.hpp"
+#include "decoder/link_reassembly.hpp"
 
 namespace aribcaption::internal {
 
@@ -43,11 +44,19 @@ public:
                     Profile profile = Profile::kDefault,
                     LanguageId language_id = LanguageId::kDefault);
     void SetEncodingScheme(EncodingScheme encoding_scheme);
-    void SetCaptionType(CaptionType type) { type_ = type; }
+    void SetCaptionType(CaptionType type) {
+        if (type_ != type) {
+            type_ = type;
+            ClearInFlightGroups();
+        }
+    }
     void SetProfile(Profile profile);
     void SwitchLanguage(LanguageId language_id);
     void SetReplaceMSZFullWidthAlphanumeric(bool replace);
     void SetReplaceMSZFullWidthJapanese(bool replace);
+    // Enables/disables linked data group reassembly. Only an actual on/off
+    // change discards in-flight groups; repeated calls with the same value keep them.
+    void SetDataGroupReassemblyEnabled(bool enabled);
     [[nodiscard]]
     uint32_t QueryISO6392LanguageCode(LanguageId language_id) const;
     DecodeStatus Decode(const uint8_t* pes_data, size_t length, int64_t pts, DecodeResult& out_result);
@@ -57,6 +66,11 @@ private:
     void ResetGraphicSets();
     void ResetWritingFormat();
     void ResetInternalState();
+    // Drop only the linked groups still waiting for fragments; display state is untouched.
+    void ClearInFlightGroups();
+    // Parse a fully reassembled data group body through the existing management/statement path.
+    DecodeStatus DecodeCompleteDataGroup(uint8_t data_group_id, const uint8_t* body, size_t body_size,
+                                         int64_t pts, DecodeResult& out_result);
     bool ParseCaptionManagementData(const uint8_t* data, size_t length);
     bool ParseCaptionStatementData(const uint8_t* data, size_t length);
     bool ParseDataUnit(const uint8_t* data, size_t length);
@@ -115,6 +129,9 @@ private:
 
     bool replace_msz_fullwidth_ascii_ = true;
     bool replace_msz_fullwidth_ja_ = true;
+
+    bool data_group_reassembly_enabled_ = false;
+    LinkReassembler link_reassembler_;
 
     std::vector<LanguageInfo> language_infos_;
     uint32_t current_iso6392_language_code_ = 0;

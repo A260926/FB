@@ -150,6 +150,73 @@ gcc main.c -o main `pkg-config --cflags --libs --static libaribcaption`
 gcc main.c -o main `pkg-config --cflags --libs libaribcaption`
 ```
 
+### Previewing fragmented (linked) caption data groups
+
+A broadcast data group may arrive split across several PES packets as linked fragments.
+For clip preview you usually want the whole caption shown at the first fragment's timestamp.
+Enable the optional reassembly mode; it is off by default and `Decode()` then keeps its
+existing per-PES behavior. When enabled, each `Decode()` call still receives one PES, but
+incomplete groups return `DecodeStatus::kNoCaption` with an empty result, and only the
+reassembled whole body is parsed once the final fragment arrives. The published caption
+carries the PTS of the first fragment (which may be `PTS_NOPTS`); later fragment timestamps
+never override it.
+
+```cpp
+#include "aribcaption/aribcaption.hpp"
+using namespace aribcaption;
+
+// Your demuxer output: one PES packet, which may be only one link fragment.
+struct PesPacket {
+    const uint8_t* data;
+    size_t size;
+    int64_t pts_ms;
+};
+
+void FeedPes(aribcaption::Decoder& decoder, const PesPacket& pes) {
+    aribcaption::DecodeResult result;
+    aribcaption::DecodeStatus status =
+        decoder.Decode(pes.data, pes.size, pes.pts_ms, result);
+
+    if (status == aribcaption::DecodeStatus::kNoCaption) {
+        return;  // group not complete yet (or no caption in this data group)
+    } else if (status == aribcaption::DecodeStatus::kError) {
+        return;  // the affected in-flight group was dropped; other groups keep assembling
+    }
+
+    // Got the complete caption, timestamped with the first fragment's PTS.
+    PresentCaption(*result.caption);
+}
+
+// ...
+aribcaption::Context context;
+aribcaption::Decoder decoder(context);
+decoder.Initialize(EncodingScheme::kAuto);
+decoder.SetDataGroupReassemblyEnabled(true);  // opt-in; default is false
+
+for (const PesPacket& pes : stream) {  // feed every PES exactly as before
+    FeedPes(decoder, pes);
+}
+```
+
+The same control is exposed through the C API:
+```c
+#include "aribcaption/aribcaption.h"
+
+aribcc_decoder_set_data_group_reassembly_enabled(decoder, true);
+
+aribcc_caption_t caption;
+aribcc_decode_status_t status =
+    aribcc_decoder_decode(decoder, pes_data, pes_size, pts_ms, &caption);
+if (status == ARIBCC_DECODE_STATUS_GOT_CAPTION) {
+    PresentCaptionC(&caption);
+    aribcc_caption_cleanup(&caption);
+}
+```
+
+`Flush()`, re-`Initialize()`, an actual change of encoding/profile/caption type/language,
+and actually toggling the switch discard every group still waiting for fragments; calling
+the setter again with the same value keeps them.
+
 ## Documents
 See the comments in [public headers](include/aribcaption), and [sample code with ffmpeg](test/ffmpeg)
 

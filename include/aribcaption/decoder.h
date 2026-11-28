@@ -178,6 +178,25 @@ ARIBCC_API void aribcc_decoder_set_replace_msz_fullwidth_ascii(aribcc_decoder_t*
 ARIBCC_API void aribcc_decoder_set_replace_msz_fullwidth_japanese(aribcc_decoder_t* decoder, bool replace);
 
 /**
+ * Enable or disable reassembly of data groups transmitted as linked fragments.
+ * Default is false, in which case aribcc_decoder_decode() keeps the existing per-PES behavior.
+ *
+ * When enabled, every aribcc_decoder_decode() call feeds exactly one link fragment.
+ * Fragments are buffered per data_group_id and only the reassembled whole body is parsed
+ * once the final fragment arrives; incomplete groups return ARIBCC_DECODE_STATUS_NO_CAPTION
+ * with a zeroed out_caption and never alter the caption parsing state. The published caption
+ * carries the PTS of the first fragment (possibly ARIBCC_PTS_NOPTS).
+ *
+ * Actually toggling this value (and aribcc_decoder_initialize(), aribcc_decoder_flush(),
+ * or an actual change of encoding/profile/caption type/language) discards every group still
+ * waiting for fragments. Calling again with the same value keeps in-flight groups untouched.
+ *
+ * @param decoder  @aribcc_decoder_t
+ * @param enabled  true to enable linked data group reassembly
+ */
+ARIBCC_API void aribcc_decoder_set_data_group_reassembly_enabled(aribcc_decoder_t* decoder, bool enabled);
+
+/**
  * Query ISO639-2 Language Code for specific language id
  * @param decoder      @aribcc_decoder_t
  * @param language_id  @aribcc_languageid_t

@@ -168,6 +168,24 @@ public:
     ARIBCC_API void SetReplaceMSZFullWidthJapanese(bool replace);
 
     /**
+     * Enable or disable reassembly of data groups transmitted as linked fragments.
+     * Default is false, in which case Decode() keeps the existing per-PES behavior.
+     *
+     * When enabled, every Decode() call feeds exactly one link fragment of a data group.
+     * Fragments are buffered per data_group_id and only the reassembled whole body is
+     * parsed once the final fragment arrives; incomplete groups return DecodeStatus::kNoCaption
+     * with an empty result and never alter the caption parsing state. The published caption
+     * carries the PTS of the first fragment (possibly PTS_NOPTS).
+     *
+     * Actually toggling this value (and re-Initialize(), Flush(), or an actual change of
+     * encoding/profile/caption type/language) discards every group still waiting for fragments.
+     * Calling again with the same value keeps in-flight groups untouched.
+     *
+     * @param enabled true to enable linked data group reassembly
+     */
+    ARIBCC_API void SetDataGroupReassemblyEnabled(bool enabled);
+
+    /**
      * Query ISO639-2 Language Code for specific language id
      * @param language_id See @LanguageId
      * @return uint32_t, e.g. "jpn" => 6A 70 6E => 0x006A706E. May be 0 if language is unknown.

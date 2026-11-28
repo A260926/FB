@@ -50,6 +50,7 @@ bool DecoderImpl::Initialize(EncodingScheme encoding_scheme,
     profile_ = profile;
     language_id_ = language_id;
     ResetInternalState();
+    ClearInFlightGroups();
     return true;
 }
 
@@ -61,24 +62,30 @@ void DecoderImpl::SetEncodingScheme(EncodingScheme encoding_scheme) {
         if (active_encoding_ != detected_encoding) {
             active_encoding_ = detected_encoding;
             ResetInternalState();
+            ClearInFlightGroups();
         }
     } else {  // encoding_scheme != kAuto
         if (active_encoding_ != encoding_scheme) {
             active_encoding_ = encoding_scheme;
             ResetInternalState();
+            ClearInFlightGroups();
         }
     }
 };
 
 void DecoderImpl::SetProfile(Profile profile) {
-    profile_ = profile;
-    ResetWritingFormat();
+    if (profile_ != profile) {
+        profile_ = profile;
+        ResetWritingFormat();
+        ClearInFlightGroups();
+    }
 }
 
 void DecoderImpl::SwitchLanguage(LanguageId language_id) {
     if (language_id_ != language_id) {
         language_id_ = language_id;
         current_iso6392_language_code_ = QueryISO6392LanguageCode(language_id);
+        ClearInFlightGroups();
     }
 }
 
@@ -118,7 +125,6 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
     }
 
     out_result.caption.reset();
-    pts_ = pts;
     const uint8_t* data = pes_data;
 
     uint8_t data_identifier = data[0];
@@ -141,22 +147,67 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
     }
 
     size_t data_group_begin = 3 + PES_data_packet_header_length;
-    if (data_group_begin + 5 > length) {
-        log_->e("DecoderImpl: pes_data length does not enough for a whole data_group");
+
+    if (!data_group_reassembly_enabled_) {
+        // Legacy behavior: each PES carries one complete data_group.
+        if (data_group_begin + 5 > length) {
+            log_->e("DecoderImpl: pes_data length does not enough for a whole data_group");
+            return DecodeStatus::kError;
+        }
+
+        uint8_t data_group_id = (data[data_group_begin] & 0b11111100) >> 2;
+        size_t data_group_size = ((size_t)data[data_group_begin + 3] << 8) |
+                                 ((size_t)data[data_group_begin + 4] << 0);
+        if (data_group_begin + 5 + data_group_size > length) {
+            log_->e("DecoderImpl: pes_data length does not enough for a whole data_group");
+            return DecodeStatus::kError;
+        }
+
+        if (data_group_size == 0) {
+            return DecodeStatus::kNoCaption;
+        }
+
+        return DecodeCompleteDataGroup(data_group_id,
+                                       data + data_group_begin + 5, data_group_size,
+                                       pts, out_result);
+    }
+
+    // Linked data group reassembly: each PES carries exactly one link fragment.
+    if (data_group_begin > length) {
+        // The data_group_id byte cannot even be read; other in-flight groups are kept.
+        log_->e("DecoderImpl: pes_data length does not enough for a link fragment");
         return DecodeStatus::kError;
     }
 
-    uint8_t data_group_id = (data[data_group_begin] & 0b11111100) >> 2;
-    size_t data_group_size = ((size_t)data[data_group_begin + 3] << 8) |
-                             ((size_t)data[data_group_begin + 4] << 0);
-    if (data_group_begin + 5 + data_group_size > length) {
-        log_->e("DecoderImpl: pes_data length does not enough for a whole data_group");
-        return DecodeStatus::kError;
+    uint8_t complete_group_id = 0;
+    std::vector<uint8_t> assembled_body;
+    int64_t first_pts = PTS_NOPTS;
+
+    DecodeStatus status = link_reassembler_.ProcessFragment(data + data_group_begin,
+                                                            length - data_group_begin,
+                                                            pts,
+                                                            complete_group_id,
+                                                            assembled_body,
+                                                            first_pts);
+    if (status != DecodeStatus::kGotCaption) {
+        // kNoCaption: still waiting for more fragments. kError: the affected group was dropped.
+        // Neither case touches the caption parsing state.
+        return status;
     }
 
-    if (data_group_size == 0) {
+    // The whole body is available only now; feed it through the existing parser once.
+    return DecodeCompleteDataGroup(complete_group_id,
+                                   assembled_body.data(), assembled_body.size(),
+                                   first_pts, out_result);
+}
+
+DecodeStatus DecoderImpl::DecodeCompleteDataGroup(uint8_t data_group_id, const uint8_t* body, size_t body_size,
+                                                  int64_t pts, DecodeResult& out_result) {
+    if (body_size == 0) {
         return DecodeStatus::kNoCaption;
     }
+
+    pts_ = pts;
 
     uint8_t dgi_id = data_group_id & 0x0F;
     int dgi_group = (data_group_id >> 5) & 1;
@@ -172,10 +223,11 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
              * For caption management data, if data_group_id group equals to previous management data's group
              * This packet could be considered as retransmission, ignore it
              */
+            caption_.reset();
             return DecodeStatus::kNoCaption;
         } else {
             // Handle caption management data
-            ret = ParseCaptionManagementData(data + data_group_begin + 5, data_group_size);
+            ret = ParseCaptionManagementData(body, body_size);
             if (ret) {
                 // Only acknowledge a new group if the parsing was successful
                 prev_dgi_group_ = dgi_group;
@@ -185,10 +237,11 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
         // Caption statement data
         if (dgi_id != static_cast<uint8_t>(language_id_)) {
             // Non-expected language id, ignore it
+            caption_.reset();
             return DecodeStatus::kNoCaption;
         } else {
             // Handle caption statement data
-            ret = ParseCaptionStatementData(data + data_group_begin + 5, data_group_size);
+            ret = ParseCaptionStatementData(body, body_size);
         }
     }
 
@@ -218,10 +271,24 @@ DecodeStatus DecoderImpl::Decode(const uint8_t* pes_data, size_t length, int64_t
     return DecodeStatus::kNoCaption;
 }
 
+void DecoderImpl::ClearInFlightGroups() {
+    link_reassembler_.Clear();
+}
+
 void DecoderImpl::Flush() {
     ResetInternalState();
     // We need to accept caption management data again, if we are about to face a seek or discontinuity
     prev_dgi_group_ = -1;
+    // Any linked group still waiting for fragments cannot survive the discontinuity.
+    ClearInFlightGroups();
+}
+
+void DecoderImpl::SetDataGroupReassemblyEnabled(bool enabled) {
+    if (data_group_reassembly_enabled_ != enabled) {
+        // Toggling the mode invalidates every in-flight group and cannot restore old ones.
+        data_group_reassembly_enabled_ = enabled;
+        ClearInFlightGroups();
+    }
 }
 
 auto DecoderImpl::DetectEncodingScheme() -> EncodingScheme {
@@ -440,6 +507,8 @@ bool DecoderImpl::ParseCaptionManagementData(const uint8_t* data, size_t length)
         if (active_encoding_ != detected_encoding) {
             active_encoding_ = detected_encoding;
             ResetInternalState();
+            // The encoding actually changed: other in-flight linked groups are invalidated.
+            ClearInFlightGroups();
         }
     }
 
