@@ -27,6 +27,11 @@ add_executable(obj_to_ccm obj_to_ccm.c)
 add_executable(mesh_info mesh_info.c)
 add_executable(subd_cpu subd_cpu.c)
 
+# C++17 headless inverse-subdivision example (no GL/GLFW dependency).
+add_executable(unsubdivide unsubdivide.cpp ${CMAKE_SOURCE_DIR}/src/cc_Unsubdivide.cpp)
+target_include_directories(unsubdivide PRIVATE ${CMAKE_SOURCE_DIR})
+set_target_properties(unsubdivide PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+
 add_executable(bench_cpu subd_cpu.c)
 target_compile_definitions(bench_cpu PUBLIC -DFLAG_BENCH)
 
