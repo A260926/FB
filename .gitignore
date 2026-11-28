@@ -15,3 +15,6 @@ gradle.properties
 .classpath
 .project
 .settings
+
+# Task support build output
+.task-build/

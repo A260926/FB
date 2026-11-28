@@ -106,6 +106,20 @@ public class ElfSectionHeader {
      */
     public static final int SHT_LOOS = 0x60000000;
     /**
+     * Android packed relocation section holding {@link ElfRelocationSection} entries compressed in the
+     * APS2 format (SHT_ANDROID_REL). The expanded entries are exposed through
+     * {@link ElfRelocationSection#relocations}, while {@link #sh_type} and the section bytes keep their
+     * on-disk form.
+     */
+    public static final int SHT_ANDROID_REL = 0x60000001;
+    /**
+     * Android packed relocation section holding {@link ElfRelocationAddendSection} entries compressed in
+     * the APS2 format (SHT_ANDROID_RELA). The expanded entries are exposed through
+     * {@link ElfRelocationAddendSection#relocations}, while {@link #sh_type} and the section bytes keep
+     * their on-disk form.
+     */
+    public static final int SHT_ANDROID_RELA = 0x60000002;
+    /**
      * Upper bound of the range of indexes reserved for operating system-specific semantics.
      */
     public static final int SHT_HIOS = 0x6fffffff;

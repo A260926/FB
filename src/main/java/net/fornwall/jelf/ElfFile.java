@@ -1380,6 +1380,10 @@ public final class ElfFile {
                             return new ElfRelocationAddendSection(parser, elfSectionHeader);
                         case ElfSectionHeader.SHT_REL:
                             return new ElfRelocationSection(parser, elfSectionHeader);
+                        case ElfSectionHeader.SHT_ANDROID_RELA:
+                            return new ElfRelocationAddendSection(parser, elfSectionHeader);
+                        case ElfSectionHeader.SHT_ANDROID_REL:
+                            return new ElfRelocationSection(parser, elfSectionHeader);
                         case ElfSectionHeader.SHT_GNU_HASH:
                             return new ElfGnuHashTable(parser, elfSectionHeader);
                         default:

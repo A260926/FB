@@ -40,13 +40,31 @@ public final class ElfRelocation {
     public final long r_info; // Elf32_Word or Elf64_Xword
 
     private final ElfFile elfFile;
+    /**
+     * The relocation section this entry belongs to, or null for entries created through the legacy
+     * package-private constructor. Used to resolve the symbol table via {@code sh_link}.
+     */
+    private final ElfRelocationSection owner;
 
     ElfRelocation(ElfParser parser, long offset) {
+        this(parser, offset, null);
+    }
+
+    ElfRelocation(ElfParser parser, long offset, ElfRelocationSection owner) {
         parser.seek(offset);
 
         r_offset = parser.readIntOrLong();
         r_info = parser.readIntOrLong();
         elfFile = parser.elfFile;
+        this.owner = owner;
+    }
+
+    /** Constructor for entries expanded from an {@link ElfSectionHeader#SHT_ANDROID_REL} section. */
+    ElfRelocation(long rOffset, long rInfo, ElfFile elfFile, ElfRelocationSection owner) {
+        this.r_offset = rOffset;
+        this.r_info = rInfo;
+        this.elfFile = elfFile;
+        this.owner = owner;
     }
 
     /**
@@ -71,8 +89,14 @@ public final class ElfRelocation {
     /**
      * The symbol with respect to which the relocation must be made.
      * Use {@link #getSymbolIndex()}} to get the resolved {@link ElfSymbol} from this index.
+     * <p>
+     * The symbol table is the one referenced by the owning relocation section's {@code sh_link}, so
+     * ordinary and Android packed relocations resolve against their own (possibly dynamic) symbol table.
      */
     public ElfSymbol getSymbol() {
+        if (owner != null) {
+            return owner.getSymbolTable().symbols[getSymbolIndex()];
+        }
         return elfFile.getSymbolTableSection().symbols[getSymbolIndex()];
     }
 

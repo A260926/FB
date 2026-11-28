@@ -156,6 +156,12 @@ public final class ElfSymbol {
     public final int section_type;
 
     /**
+     * The symbol table section containing this symbol, or null for symbols created through the legacy
+     * package-private constructor. Its {@code sh_link} names the string table used by {@link #getName()}.
+     */
+    private final ElfSymbolTableSection owner;
+
+    /**
      * Offset from the beginning of the file to this symbol.
      */
     public final long offset;
@@ -163,7 +169,12 @@ public final class ElfSymbol {
     private final ElfFile elfHeader;
 
     ElfSymbol(ElfParser parser, long offset, int section_type) {
+        this(parser, offset, section_type, null);
+    }
+
+    ElfSymbol(ElfParser parser, long offset, int section_type, ElfSymbolTableSection owner) {
         this.elfHeader = parser.elfFile;
+        this.owner = owner;
         parser.seek(offset);
         this.offset = offset;
         if (parser.elfFile.ei_class == ElfFile.CLASS_32) {
@@ -231,7 +242,14 @@ public final class ElfSymbol {
         // Check to make sure this symbol has a name.
         if (st_name == 0) return null;
 
-        // Retrieve the name of the symbol from the correct string table.
+        // Retrieve the name of the symbol from the string table linked by the owning symbol table
+        // (sh_link), so a .symtab and a .dynsym can each use their own string table.
+        if (owner != null) {
+            return owner.getStringTable().get(st_name);
+        }
+
+        // Legacy fallback for symbols without an owning section: select by the section type's
+        // conventional string table name.
         String symbol_name = null;
         if (section_type == ElfSectionHeader.SHT_SYMTAB) {
             symbol_name = elfHeader.getStringTable().get(st_name);
