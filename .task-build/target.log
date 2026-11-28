@@ -1,0 +1,19 @@
+CASE Continuous StrongDrive checks=6
+CASE Continuous SixChannels checks=8
+CASE Continuous ControlNodeSweep checks=4
+GROUP Continuous cases=3 checks=18 COMPLETE
+CASE Clock Rate44100To48000 checks=8
+CASE Clock Rate48000To32000 checks=8
+CASE Clock SameRate checks=7
+CASE Clock EmptyInput checks=6
+CASE Clock SingleFrame checks=8
+CASE Clock HugeOriginAndPermutation checks=59
+GROUP Clock cases=6 checks=96 COMPLETE
+CASE Streaming BitExactChunking checks=2641
+CASE Streaming ZeroCapacity checks=878
+CASE Streaming StarvationThenFeed checks=878
+CASE Streaming EofDrainAndReuse checks=8
+CASE Streaming DepthFailureRollback checks=14
+CASE Streaming IllegalConfiguration checks=13
+GROUP Streaming cases=6 checks=4432 COMPLETE
+TARGET_COMPLETE cases=15
