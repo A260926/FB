@@ -164,6 +164,105 @@ def Render(p, phi, height, horizon, scale_height, distance, screen_width, screen
 Render( Point(0, 0), 0, 50, 120, 120, 300, 800, 600 )
 ```
 
+## Procedural clipmap terrain
+
+`terrain-clipmap.js` adds an editable, streaming terrain that never allocates
+a whole-world array. It is plain JavaScript builtins only and loads both as a
+browser classic script (globals `TerrainSource` / `TerrainClipmap`) and as a
+Node CommonJS module.
+
+### TerrainSource and override coordinates
+
+`new TerrainSource(sampleBase)` takes a deterministic `sampleBase(x, y)`. It
+is only ever called with integer world coordinates, each returning
+`{height, color}` where `height` is finite and `color` is a `uint32` in the
+existing `0xAABBGGRR` layout. The base function is invoked only for grid
+points that actually have to fill a cache cell.
+
+`source.edit([{x, y, height, color}, ...])` is a sparse override cover:
+
+* The whole batch is validated first; an illegal item throws `RangeError` and
+  neither the source nor any subscribed view changes.
+* An empty batch changes nothing. Duplicate coordinates keep the last item.
+* The cover is keyed by the **raw, unwrapped world coordinates**. When the
+  image maps are adapted as a base, only the read-only base wraps with
+  `& (map.width-1)`; an edit at `(x, y)` always means world point `(x, y)` even
+  past the map period, so it is still there after you leave and come back.
+* One source can be subscribed to by many views.
+
+### Point-sampled levels of detail
+
+`new TerrainClipmap(source, {side, levels})` keeps exactly `side × side`
+resident samples per level (`side` an odd integer ≥ 9, `levels` in 1..16).
+Level `l` has grid spacing `2^l` and stores the source value directly at that
+absolute world grid point — there is no regional averaging.
+
+`moveTo(cx, cy)` centers every level on the camera. For spacing `s` and
+`R = (side-1)/2`, the window's lower-left grid node is
+`(floor(cx/s)-R, floor(cy/s)-R)` and spans `side` nodes. All level windows are
+validated before anything is written; a window leaving `[-2^30, 2^30]` throws
+`RangeError` and leaves the view untouched.
+
+`sample(x, y)` reconstructs around the last `moveTo` center using the
+Chebyshev radius `r = max(|x-cx|, |y-cy|)` and the boundary distances
+`b_l = (R-2)·2^l`:
+
+* `r ≤ b_0/2` uses level 0 alone.
+* `b_l/2 < r < b_l` blends the bilinear value of level `l` with level `l+1`,
+  weight `w = 2r/b_l - 1`. At `r = b_l` the coarser level is used directly
+  (`w = 1`), which keeps the level boundary continuous.
+* The last level has no coarser neighbour and is used directly.
+* `r > b_last` returns `null` (nothing is drawn there).
+
+Each level bilinearly interpolates `floor(x/s)`, `floor(y/s)` and their four
+neighbours. Height and the four RGBA channels are interpolated as floats; only
+the final colour is rounded per channel and clamped to `0..255`. Sampling never
+calls the source.
+
+### Ring-buffer cache lifecycle
+
+* Every level is a fixed ring of typed arrays — `(side+1)²` slots — that is
+  never moved or re-copied. Each slot stores the absolute grid identity
+  (`gridX`, `gridY`) of the sample it holds. The one-cell "ghost" margin means
+  an incoming strip wraps into a free slot instead of evicting the strip that
+  just left, so walking back into a previous window performs **zero** source
+  reads. Resident memory stays `O(side² × levels)`; no off-window history or
+  full pyramid is retained.
+* A move reads only the new/old window set difference (a subset when ghost
+  slots already hold some difference points). The corner where two incoming
+  strips intersect is read once. A single-axis span of `side` fills each
+  resident slot exactly once.
+* After `source.edit(...)`, before the next sample/render, every still
+  subscribed view refreshes only resident slots whose absolute coordinate lies
+  on that level's grid. Non-resident edits trigger no reads; they surface when
+  the point later enters a window.
+* `destroy()` unsubscribes a view; using it afterwards throws, while other
+  views on the same source keep working. `source.subscriberCount()` reports
+  live views, and `view.stats()` reports cumulative `reads`,
+  `fillsByLevel`, `resident`, plus the `lastReads` / `lastFillsByLevel` of the
+  most recent move or edit notification.
+
+### Viewer integration
+
+`VoxelSpace.html` keeps the original full-array mode and adds an optional
+**Clipmap terrain** checkbox plus a **Raise ground under camera** button. The
+production `Render` keeps its depth stepping, screen projection,
+`DrawVerticalLine` and `hiddeny` occlusion; only the terrain fetch is replaced
+by `view.sample`, and `null` samples are skipped so out-of-range columns keep
+their sky. `UpdateCamera`'s ground clearance uses the same view. The periodic
+image maps are wrapped as a read-only base, and switching maps destroys the old
+view and source before building new ones. `installClipmap(source)` is the
+public entry used to attach a custom procedural source (the headless example
+and tests drive it this way).
+
+Headless checks and the example need no window or downloaded images:
+
+```
+node task_support/run.js baseline   # original array Render
+node task_support/run.js target     # module tests + clipmap example
+node examples/clipmap.js out.ppm    # three P6 frames: initial, moved, edited
+```
+
 ## Links
 
 [Web Project demo][project demo] page
