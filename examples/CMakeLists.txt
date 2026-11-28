@@ -52,6 +52,10 @@ add_executable(vttsegmenter vttsegmenter.c)
 target_link_libraries(vttsegmenter caption)
 install(TARGETS vttsegmenter DESTINATION bin)
 
+add_executable(caption_playout caption_playout.c)
+target_link_libraries(caption_playout caption)
+install(TARGETS caption_playout DESTINATION bin)
+
 #add_executable(rtmpspit rtmpspit.c  flv.c)
 #target_link_libraries(rtmpspit caption rtmp)
 #install(TARGETS rtmpspit DESTINATION bin)

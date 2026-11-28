@@ -143,9 +143,19 @@ libcaption_stauts_t eia608_write_char(caption_frame_t* frame, char* c)
 
 libcaption_stauts_t caption_frame_end(caption_frame_t* frame)
 {
-    memcpy(&frame->front, &frame->back, sizeof(caption_frame_buffer_t));
-    caption_frame_buffer_clear(&frame->back); // This is required
-    return LIBCAPTION_READY;
+    // Pop-on EOC: swap displayed and hidden memory. The previous front becomes
+    // the new hidden back buffer, so a later pop-on can diff against it. The
+    // duplicated second EOC must not swap again.
+    if (frame->write == &frame->back) {
+        caption_frame_buffer_t tmp = frame->front;
+        frame->front = frame->back;
+        frame->back = tmp;
+        frame->write = 0; // leave pop-on loading mode; RCL re-enters it
+        return LIBCAPTION_READY;
+    }
+
+    // Duplicate EOC (or EOC outside pop-on loading): no further swap.
+    return LIBCAPTION_OK;
 }
 
 libcaption_stauts_t caption_frame_decode_preamble(caption_frame_t* frame, uint16_t cc_data)
@@ -187,15 +197,17 @@ libcaption_stauts_t caption_frame_backspace(caption_frame_t* frame)
 libcaption_stauts_t caption_frame_delete_to_end_of_row(caption_frame_t* frame)
 {
     int c;
-    if (frame->write) {
-        for (c = frame->state.col; c < SCREEN_COLS; ++c) {
-            caption_frame_write_char(frame, frame->state.row, c, eia608_style_white, 0, EIA608_CHAR_NULL);
-        }
+
+    if (!frame->write || 0 > frame->state.row || SCREEN_ROWS <= frame->state.row ||
+        0 > frame->state.col || SCREEN_COLS <= frame->state.col) {
+        return LIBCAPTION_READY;
     }
 
-    // TODO test this and replace loop
-    //  uint8_t* dst = (uint8_t*)frame_buffer_cell(frame->write, frame->state.row, frame->state.col);
-    //  memset(dst,0,sizeof(caption_frame_cell_t) * (SCREEN_COLS - frame->state.col - 1))
+    // Clear the current cell and every cell to the right on the same row of
+    // the write screen, including any style and underline attributes.
+    for (c = frame->state.col; c < SCREEN_COLS; ++c) {
+        memset(frame_buffer_cell(frame->write, frame->state.row, c), 0, sizeof(caption_frame_cell_t));
+    }
 
     return LIBCAPTION_READY;
 }
