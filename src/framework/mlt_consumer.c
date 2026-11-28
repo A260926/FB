@@ -109,6 +109,13 @@ typedef struct
     int process_head;
     atomic_int started;
     pthread_t *threads; /**< used to deallocate all threads */
+    /* strict video rendering state, guarded by strict_mutex */
+    pthread_mutex_t strict_mutex;
+    pthread_cond_t strict_cond; /**< wakes strict idling workers on stop */
+    int strict_video;  /**< effective strict rendering for this run */
+    int strict_stop;   /**< stop accepting new work after a failure */
+    mlt_position strict_error_position; /**< program position of the failure */
+    int strict_failure_delivered; /**< the failing frame has been reported */
 } consumer_private;
 
 static void mlt_consumer_property_changed(mlt_properties owner, mlt_consumer self, mlt_event_data);
@@ -119,6 +126,18 @@ static void on_consumer_frame_show(mlt_properties owner, mlt_consumer self, mlt_
 static void mlt_thread_create(mlt_consumer self, mlt_thread_function_t function);
 static void mlt_thread_join(mlt_consumer self);
 static void consumer_read_ahead_start(mlt_consumer self);
+static int consumer_strict_video(mlt_consumer self);
+static int consumer_strict_stop_position(mlt_consumer self, mlt_position *position);
+static int consumer_strict_stopped(mlt_consumer self);
+static int consumer_strict_failed(mlt_consumer self);
+static void consumer_strict_record(mlt_consumer self, mlt_frame frame, int error);
+static int consumer_render_frame(mlt_consumer self,
+                                 mlt_frame frame,
+                                 uint8_t **image,
+                                 mlt_image_format *format,
+                                 int *width,
+                                 int *height);
+static mlt_frame consumer_deliver_failure(mlt_consumer self, mlt_frame frame);
 
 /** Initialize a consumer service.
  *
@@ -186,6 +205,7 @@ int mlt_consumer_init(mlt_consumer self, void *child, mlt_profile profile)
         mlt_events_register(properties, "consumer-stopped");
         mlt_events_register(properties, "consumer-thread-create");
         mlt_events_register(properties, "consumer-thread-join");
+        mlt_events_register(properties, "consumer-video-error");
         mlt_events_listen(properties,
                           self,
                           "consumer-frame-show",
@@ -203,6 +223,8 @@ int mlt_consumer_init(mlt_consumer self, void *child, mlt_profile profile)
         pthread_cond_init(&priv->put_cond, NULL);
 
         pthread_mutex_init(&priv->position_mutex, NULL);
+        pthread_mutex_init(&priv->strict_mutex, NULL);
+        pthread_cond_init(&priv->strict_cond, NULL);
     }
     return error;
 }
@@ -551,6 +573,24 @@ int mlt_consumer_start(mlt_consumer self)
     mlt_properties_set_int(properties, "frame_duration", frame_duration);
     mlt_properties_set_int(properties, "drop_count", 0);
 
+    // A new run must not inherit the previous run's strict video failure or
+    // its read-ahead/preroll state. A restart after stop re-seeks to the
+    // producer's current position as if starting fresh.
+    pthread_mutex_lock(&priv->strict_mutex);
+    priv->strict_video = mlt_properties_get_int(properties, "strict_video");
+    priv->strict_stop = 0;
+    priv->strict_error_position = 0;
+    priv->strict_failure_delivered = 0;
+    pthread_mutex_unlock(&priv->strict_mutex);
+    priv->preroll = 1;
+    priv->is_purge = 0;
+    priv->ahead = 0;
+    priv->process_head = 0;
+    priv->consecutive_dropped = 0;
+    priv->consecutive_rendered = 0;
+    mlt_properties_clear(properties, "video_error");
+    mlt_properties_clear(properties, "video_error_position");
+
     // Check and run an ante command
     if (mlt_properties_exists(properties, "ante")) {
         if (!ante_post_commands_allowed()) {
@@ -791,17 +831,19 @@ static void *consumer_read_ahead_thread(void *arg)
     int width = mlt_properties_get_int(properties, "width");
     int height = mlt_properties_get_int(properties, "height");
 
-    // See if video is turned off
-    int video_off = mlt_properties_get_int(properties, "video_off");
-    int preview_off = mlt_properties_get_int(properties, "preview_off");
-    int preview_format = mlt_properties_get_int(properties, "preview_format");
-
     // Audio processing variables
     int samples = 0;
     void *audio = NULL;
 
     // See if audio is turned off
     int audio_off = mlt_properties_get_int(properties, "audio_off");
+
+    // Video processing state. Strict video mode must not skip any video
+    // frame, even when the cost heuristic would otherwise drop it.
+    int video_off = mlt_properties_get_int(properties, "video_off");
+    int strict = consumer_strict_video(self);
+    int preview_off = mlt_properties_get_int(properties, "preview_off");
+    int preview_format = mlt_properties_get_int(properties, "preview_format");
 
     // General frame variable
     mlt_frame frame = NULL;
@@ -831,7 +873,7 @@ static void *consumer_read_ahead_thread(void *arg)
 
     // Get the first frame
     frame = mlt_consumer_get_frame(self);
-    if (priv->speed != mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame), "_speed")) {
+    if (frame && priv->speed != mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame), "_speed")) {
         priv->speed = mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame), "_speed");
         // get_frame might want to recalculate the minimum queue size if the speed has changed.
         pthread_cond_broadcast(&priv->queue_cond);
@@ -852,16 +894,18 @@ static void *consumer_read_ahead_thread(void *arg)
         }
 
         // Get the image of the first frame
-        if (!video_off) {
-            mlt_events_fire(MLT_CONSUMER_PROPERTIES(self),
-                            "consumer-frame-render",
-                            mlt_event_data_from_frame(frame));
-            mlt_frame_get_image(frame, &image, &priv->image_format, &width, &height, 0);
-        }
-
-        // Mark as rendered
-        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
+        if (!video_off)
+            consumer_render_frame(self,
+                                  frame,
+                                  &image,
+                                  &priv->image_format,
+                                  &width,
+                                  &height);
+        else
+            mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
         last_pos = start_pos = pos = mlt_frame_get_position(frame);
+    } else {
+        priv->speed = 0;
     }
 
     // Get the starting time (can ignore the times above)
@@ -895,6 +939,26 @@ static void *consumer_read_ahead_thread(void *arg)
         if (frame == NULL)
             continue;
         pos = mlt_frame_get_position(frame);
+
+        // Strict mode stops accepting new work once a failure is recorded.
+        // Frames before the failure stay queued for ordered delivery; later
+        // ones are discarded. Idle without holding the queue lock (delivery
+        // still needs it) until stop, then exit through the normal tail.
+        {
+            mlt_position stop_position = 0;
+            if (consumer_strict_video(self)
+                && consumer_strict_stop_position(self, &stop_position)
+                && pos > stop_position) {
+                mlt_frame_close(frame);
+                frame = NULL;
+                pthread_mutex_lock(&priv->strict_mutex);
+                while (atomic_load(&priv->ahead))
+                    pthread_cond_wait(&priv->strict_cond, &priv->strict_mutex);
+                pthread_mutex_unlock(&priv->strict_mutex);
+                break;
+            }
+        }
+
         priv->speed = mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame), "_speed");
 
         // WebVfx uses this to setup a consumer-stopping event handler.
@@ -926,23 +990,25 @@ static void *consumer_read_ahead_thread(void *arg)
         }
 
         // If skip flag not set or frame-dropping disabled
-        if (!skip_next || priv->real_time == -1) {
+        if (strict || !skip_next || priv->real_time == -1) {
             if (!video_off) {
                 // Reset width/height - could have been changed by previous mlt_frame_get_image
                 width = mlt_properties_get_int(properties, "width");
                 height = mlt_properties_get_int(properties, "height");
 
                 // Get the image
-                mlt_events_fire(MLT_CONSUMER_PROPERTIES(self),
-                                "consumer-frame-render",
-                                mlt_event_data_from_frame(frame));
                 mlt_log_timings_begin();
-                mlt_frame_get_image(frame, &image, &priv->image_format, &width, &height, 0);
+                consumer_render_frame(self,
+                                      frame,
+                                      &image,
+                                      &priv->image_format,
+                                      &width,
+                                      &height);
                 mlt_log_timings_end(NULL, "mlt_frame_get_image");
+            } else {
+                // Indicate the rendered image is available.
+                mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
             }
-
-            // Indicate the rendered image is available.
-            mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
 
             // Reset consecutively-skipped counter
             skipped = 0;
@@ -1018,7 +1084,6 @@ static void *consumer_read_ahead_thread(void *arg)
     pthread_mutex_lock(&priv->queue_mutex);
     while (mlt_deque_count(priv->queue))
         mlt_frame_close(mlt_deque_pop_back(priv->queue));
-
     // Close the queue
     mlt_deque_close(priv->queue);
     priv->queue = NULL;
@@ -1057,6 +1122,180 @@ static inline int first_unprocessed_frame(mlt_consumer self)
     return index;
 }
 
+/** Is strict video rendering enabled for this run?
+ *
+ * \private \memberof mlt_consumer_s
+ */
+static int consumer_strict_video(mlt_consumer self)
+{
+    consumer_private *priv = self->local;
+    pthread_mutex_lock(&priv->strict_mutex);
+    int strict = priv->strict_video;
+    pthread_mutex_unlock(&priv->strict_mutex);
+    return strict;
+}
+
+/** Read the stop position for strict work acceptance.
+ *
+ * \private \memberof mlt_consumer_s
+ * \return true when workers must not start frames at or after \p position
+ */
+static int consumer_strict_stop_position(mlt_consumer self, mlt_position *position)
+{
+    consumer_private *priv = self->local;
+    int stop;
+    pthread_mutex_lock(&priv->strict_mutex);
+    stop = priv->strict_stop;
+    if (position)
+        *position = priv->strict_error_position;
+    pthread_mutex_unlock(&priv->strict_mutex);
+    return stop;
+}
+
+/** Record the first strict video failure and stop accepting later work.
+ *
+ * Only the earliest program position is recorded regardless of which worker
+ * finished first. Does not fire the event: that happens on the delivery
+ * thread at the failing frame's turn.
+ *
+ * \private \memberof mlt_consumer_s
+ */
+static void consumer_strict_record(mlt_consumer self, mlt_frame frame, int error)
+{
+    consumer_private *priv = self->local;
+    mlt_position position = mlt_frame_get_position(frame);
+
+    mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "video_error", error);
+
+    // Record the earliest failing program position regardless of which
+    // worker finished first. Consumer properties and the event are only
+    // published at the delivery point, on the rt_frame thread.
+    pthread_mutex_lock(&priv->strict_mutex);
+    if (!priv->strict_stop || position < priv->strict_error_position)
+        priv->strict_error_position = position;
+    priv->strict_stop = 1;
+    pthread_mutex_unlock(&priv->strict_mutex);
+
+    // Wake delivery (it may be waiting on the queue condition) and workers
+    // (they idle once the stop position is passed).
+    pthread_mutex_lock(&priv->queue_mutex);
+    pthread_cond_broadcast(&priv->queue_cond);
+    pthread_mutex_unlock(&priv->queue_mutex);
+    pthread_mutex_lock(&priv->done_mutex);
+    pthread_cond_broadcast(&priv->done_cond);
+    pthread_mutex_unlock(&priv->done_mutex);
+}
+
+/** Render video for one frame under the consumer's strict policy.
+ *
+ * Sets rendered=1 only when video rendering completed successfully. On a
+ * strict failure the error is recorded and left on the frame for delivery.
+ * Returns 0 on success or the frame's original error code on failure.
+ * A separate internal flag records that this frame has been through the
+ * strict render path even when it failed, which keeps preview fallback out
+ * of delivery decisions.
+ *
+ * \private \memberof mlt_consumer_s
+ */
+static int consumer_render_frame(mlt_consumer self,
+                                 mlt_frame frame,
+                                 uint8_t **image,
+                                 mlt_image_format *format,
+                                 int *width,
+                                 int *height)
+{
+    mlt_properties properties = MLT_CONSUMER_PROPERTIES(self);
+    int video_off = mlt_properties_get_int(properties, "video_off");
+    int strict = consumer_strict_video(self);
+
+    if (video_off) {
+        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
+        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "_strict_rendered", 1);
+        return 0;
+    }
+
+    if (strict)
+        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "consumer.strict_video", 1);
+
+    mlt_events_fire(properties, "consumer-frame-render", mlt_event_data_from_frame(frame));
+    int error = mlt_frame_get_image(frame, image, format, width, height, 0);
+
+    if (strict && error) {
+        consumer_strict_record(self, frame, error);
+        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 0);
+        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "_strict_rendered", 1);
+        return error;
+    }
+
+    mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
+    mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "_strict_rendered", 1);
+    return 0;
+}
+
+/** Deliver a strict video failure on the calling thread.
+ *
+ * Publishes the consumer error state, fires consumer-video-error with the
+ * failing frame, and closes the consumer's reference. The listener may
+ * retain the frame by incrementing its property reference count.
+ *
+ * Must be called without the queue lock held.
+ *
+ * \private \memberof mlt_consumer_s
+ * \return NULL
+ */
+static mlt_frame consumer_deliver_failure(mlt_consumer self, mlt_frame frame)
+{
+    consumer_private *priv = self->local;
+    mlt_properties properties = MLT_CONSUMER_PROPERTIES(self);
+    mlt_properties frame_properties = MLT_FRAME_PROPERTIES(frame);
+    int error = mlt_properties_get_int(frame_properties, "video_error");
+    mlt_position position = mlt_frame_get_position(frame);
+
+    if (!error)
+        error = 1;
+    mlt_properties_set_int(frame_properties, "video_error", error);
+    mlt_properties_set_int(properties, "video_error", error);
+    mlt_properties_set_position(properties, "video_error_position", position);
+    pthread_mutex_lock(&priv->strict_mutex);
+    priv->strict_stop = 1;
+    if (!priv->strict_failure_delivered || position < priv->strict_error_position)
+        priv->strict_error_position = position;
+    priv->strict_failure_delivered = 1;
+    pthread_mutex_unlock(&priv->strict_mutex);
+
+    mlt_events_fire(properties, "consumer-video-error", mlt_event_data_from_frame(frame));
+    mlt_frame_close(frame);
+    return NULL;
+}
+
+/** Has the strict failure already been handed to the caller?
+ *
+ * \private \memberof mlt_consumer_s
+ */
+static int consumer_strict_failed(mlt_consumer self)
+{
+    consumer_private *priv = self->local;
+    int failed;
+    pthread_mutex_lock(&priv->strict_mutex);
+    failed = priv->strict_failure_delivered;
+    pthread_mutex_unlock(&priv->strict_mutex);
+    return failed;
+}
+
+/** Is video rendering forbidden to continue for strict work?
+ *
+ * \private \memberof mlt_consumer_s
+ */
+static int consumer_strict_stopped(mlt_consumer self)
+{
+    consumer_private *priv = self->local;
+    int stopped;
+    pthread_mutex_lock(&priv->strict_mutex);
+    stopped = priv->strict_stop;
+    pthread_mutex_unlock(&priv->strict_mutex);
+    return stopped;
+}
+
 /** The worker thread procedure for parallel processing frames.
  *
  * \private \memberof mlt_consumer_s
@@ -1077,8 +1316,6 @@ static void *consumer_worker_thread(void *arg)
     int height = mlt_properties_get_int(properties, "height");
     mlt_image_format format = priv->image_format;
 
-    // See if video is turned off
-    int video_off = mlt_properties_get_int(properties, "video_off");
     int preview_off = mlt_properties_get_int(properties, "preview_off");
     int preview_format = mlt_properties_get_int(properties, "preview_format");
 
@@ -1105,8 +1342,23 @@ static void *consumer_worker_thread(void *arg)
             index = first_unprocessed_frame(self);
         }
 
-        // Mark the frame for processing
+        // Strict mode stops accepting new work after the first failure. Work
+        // before the failing program position may still be needed for ordered
+        // delivery; anything at or after the failure must not be rendered.
+        // In-flight frames keep running regardless (they were marked before).
         frame = mlt_deque_peek(priv->queue, index);
+        if (consumer_strict_video(self) && consumer_strict_stopped(self)) {
+            mlt_position error_position = 0;
+            consumer_strict_stop_position(self, &error_position);
+            if (!frame || mlt_frame_get_position(frame) >= error_position) {
+                // Nothing left for this worker: leave the queue untouched and
+                // exit while delivery drains the pre-failure frames.
+                pthread_mutex_unlock(&priv->queue_mutex);
+                break;
+            }
+        }
+
+        // Mark the frame for processing
         if (frame) {
             mlt_log_debug(MLT_CONSUMER_SERVICE(self),
                           "worker processing index = %d frame " MLT_POSITION_FMT
@@ -1134,23 +1386,21 @@ static void *consumer_worker_thread(void *arg)
             mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "consumer.progressive", 1);
 #endif
 
-        // Get the image
-        if (!video_off) {
-            // Fetch width/height again
-            width = mlt_properties_get_int(properties, "width");
-            height = mlt_properties_get_int(properties, "height");
-            mlt_events_fire(MLT_CONSUMER_PROPERTIES(self),
-                            "consumer-frame-render",
-                            mlt_event_data_from_frame(frame));
-            mlt_frame_get_image(frame, &image, &format, &width, &height, 0);
-        }
-        mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
+        // Fetch width/height again
+        width = mlt_properties_get_int(properties, "width");
+        height = mlt_properties_get_int(properties, "height");
+        consumer_render_frame(self, frame, &image, &format, &width, &height);
         mlt_frame_close(frame);
-
         // Tell a waiting thread (non-realtime main consumer thread) that we are done.
         pthread_mutex_lock(&priv->done_mutex);
         pthread_cond_broadcast(&priv->done_cond);
         pthread_mutex_unlock(&priv->done_mutex);
+        if (consumer_strict_video(self)) {
+            // Ordered delivery waits on this condition for the queue head.
+            pthread_mutex_lock(&priv->queue_mutex);
+            pthread_cond_broadcast(&priv->queue_cond);
+            pthread_mutex_unlock(&priv->queue_mutex);
+        }
     }
 
     return NULL;
@@ -1281,6 +1531,11 @@ static void consumer_read_ahead_stop(mlt_consumer self)
         priv->ahead = 0;
         mlt_events_fire(MLT_CONSUMER_PROPERTIES(self), "consumer-stopping", mlt_event_data_none());
 
+        // Wake strict idling workers.
+        pthread_mutex_lock(&priv->strict_mutex);
+        pthread_cond_broadcast(&priv->strict_cond);
+        pthread_mutex_unlock(&priv->strict_mutex);
+
         // Broadcast to the condition in case it's waiting
         pthread_mutex_lock(&priv->queue_mutex);
         pthread_cond_broadcast(&priv->queue_cond);
@@ -1293,6 +1548,17 @@ static void consumer_read_ahead_stop(mlt_consumer self)
 
         // Join the thread
         mlt_thread_join(self);
+
+        // Wipe any frames the read-ahead thread left behind and close the
+        // queue so the next start gets a fresh one.
+        pthread_mutex_lock(&priv->queue_mutex);
+        if (priv->queue) {
+            while (mlt_deque_count(priv->queue))
+                mlt_frame_close(mlt_deque_pop_back(priv->queue));
+            mlt_deque_close(priv->queue);
+            priv->queue = NULL;
+        }
+        pthread_mutex_unlock(&priv->queue_mutex);
 
         // Destroy the frame queue mutex
         pthread_mutex_destroy(&priv->queue_mutex);
@@ -1319,6 +1585,11 @@ static void consumer_work_stop(mlt_consumer self)
         priv->ahead = 0;
         mlt_events_fire(MLT_CONSUMER_PROPERTIES(self), "consumer-stopping", mlt_event_data_none());
 
+        // Wake strict idling workers.
+        pthread_mutex_lock(&priv->strict_mutex);
+        pthread_cond_broadcast(&priv->strict_cond);
+        pthread_mutex_unlock(&priv->strict_mutex);
+
         // Broadcast to the queue condition in case it's waiting
         pthread_mutex_lock(&priv->queue_mutex);
         pthread_cond_broadcast(&priv->queue_cond);
@@ -1341,6 +1612,7 @@ static void consumer_work_stop(mlt_consumer self)
 
         // Deallocate the array of threads
         free(priv->threads);
+        priv->threads = NULL;
 
         // Destroy the mutexes
         pthread_mutex_destroy(&priv->queue_mutex);
@@ -1351,12 +1623,16 @@ static void consumer_work_stop(mlt_consumer self)
         pthread_cond_destroy(&priv->done_cond);
 
         // Wipe the queues
-        while (mlt_deque_count(priv->queue))
-            mlt_frame_close(mlt_deque_pop_back(priv->queue));
+        if (priv->queue) {
+            while (mlt_deque_count(priv->queue))
+                mlt_frame_close(mlt_deque_pop_back(priv->queue));
+        }
 
         // Close the queues
         mlt_deque_close(priv->queue);
+        priv->queue = NULL;
         mlt_deque_close(priv->worker_threads);
+        priv->worker_threads = NULL;
 
         mlt_events_fire(MLT_CONSUMER_PROPERTIES(self),
                         "consumer-thread-stopped",
@@ -1389,13 +1665,16 @@ void mlt_consumer_purge(mlt_consumer self)
         if (priv->started && priv->real_time)
             pthread_mutex_lock(&priv->queue_mutex);
 
-        while (priv->started && mlt_deque_count(priv->queue))
+        while (priv->started && priv->queue && mlt_deque_count(priv->queue))
             mlt_frame_close(mlt_deque_pop_back(priv->queue));
 
         if (priv->started && priv->real_time) {
             priv->is_purge = 1;
             pthread_cond_broadcast(&priv->queue_cond);
             pthread_mutex_unlock(&priv->queue_mutex);
+            pthread_mutex_lock(&priv->strict_mutex);
+            pthread_cond_broadcast(&priv->strict_cond);
+            pthread_mutex_unlock(&priv->strict_mutex);
             if (abs(priv->real_time) > 1) {
                 pthread_mutex_lock(&priv->done_mutex);
                 pthread_cond_broadcast(&priv->done_cond);
@@ -1421,6 +1700,11 @@ static mlt_frame worker_get_frame(mlt_consumer self, mlt_properties properties)
     // Frame to return
     mlt_frame frame = NULL;
     consumer_private *priv = self->local;
+
+    // Once a strict failure has been reported the run is over: do not pull
+    // any more frames from the producer until the consumer is restarted.
+    if (consumer_strict_video(self) && consumer_strict_failed(self))
+        return NULL;
     int threads = abs(priv->real_time);
     int audio_off = mlt_properties_get_int(properties, "audio_off");
     int samples = 0;
@@ -1478,8 +1762,9 @@ static mlt_frame worker_get_frame(mlt_consumer self, mlt_properties properties)
     //	mlt_log_verbose( MLT_CONSUMER_SERVICE(self), "size %d done count %d work count %d process_head %d\n",
     //		threads, first_unprocessed_frame( self ), mlt_deque_count( priv->queue ), priv->process_head );
 
-    // Feed the work queupriv->speede
-    while (priv->ahead && mlt_deque_count(priv->queue) < buffer) {
+    // Feed the work queupriv->speede (never after a strict failure).
+    while (priv->ahead && mlt_deque_count(priv->queue) < buffer
+           && !consumer_strict_stopped(self)) {
         frame = mlt_consumer_get_frame(self);
         if (frame) {
             // Process the audio
@@ -1503,14 +1788,61 @@ static mlt_frame worker_get_frame(mlt_consumer self, mlt_properties properties)
         }
     }
 
-    // Wait if not realtime.
-    while (priv->ahead && priv->real_time < 0 && !priv->is_purge
-           && !(mlt_properties_get_int(MLT_FRAME_PROPERTIES(
-                                           MLT_FRAME(mlt_deque_peek_front(priv->queue))),
-                                       "rendered"))) {
-        pthread_mutex_lock(&priv->done_mutex);
-        pthread_cond_wait(&priv->done_cond, &priv->done_mutex);
-        pthread_mutex_unlock(&priv->done_mutex);
+    // Non-strict, non-realtime: wait for the queue head to render so delivery
+    // remains ordered and frame-dropping does not apply.
+    if (priv->real_time < 0 && !consumer_strict_video(self)) {
+        while (priv->ahead && !priv->is_purge
+               && !(mlt_properties_get_int(MLT_FRAME_PROPERTIES(
+                                               MLT_FRAME(mlt_deque_peek_front(priv->queue))),
+                                           "rendered"))) {
+            pthread_mutex_lock(&priv->done_mutex);
+            pthread_cond_wait(&priv->done_cond, &priv->done_mutex);
+            pthread_mutex_unlock(&priv->done_mutex);
+        }
+    }
+
+    // Strict mode: the head of the line decides. A failed head is reported
+    // immediately even if frames further back finished first. Nothing is
+    // popped from the queue until its turn succeeds.
+    if (consumer_strict_video(self)) {
+        // Once the failing frame has been handed out, every later call reports
+        // NULL until the consumer is restarted.
+        if (consumer_strict_failed(self))
+            return NULL;
+        pthread_mutex_lock(&priv->queue_mutex);
+        while (priv->ahead && !priv->is_purge) {
+            mlt_frame head = mlt_deque_peek_front(priv->queue);
+            if (head
+                && (mlt_properties_get_int(MLT_FRAME_PROPERTIES(head), "rendered")
+                    || mlt_properties_get_int(MLT_FRAME_PROPERTIES(head), "_strict_rendered")))
+                break;
+            if (!head && consumer_strict_stopped(self))
+                break;
+            pthread_cond_wait(&priv->queue_cond, &priv->queue_mutex);
+        }
+        mlt_frame head = mlt_deque_peek_front(priv->queue);
+        if (priv->is_purge) {
+            if (head) {
+                mlt_deque_pop_front(priv->queue);
+                mlt_frame_close(head);
+            }
+            priv->is_purge = 0;
+            pthread_mutex_unlock(&priv->queue_mutex);
+            return NULL;
+        }
+        if (!head) {
+            pthread_mutex_unlock(&priv->queue_mutex);
+            return NULL;
+        }
+        if (mlt_properties_get_int(MLT_FRAME_PROPERTIES(head), "rendered")) {
+            mlt_deque_pop_front(priv->queue);
+            pthread_mutex_unlock(&priv->queue_mutex);
+            return head;
+        }
+        // The head has been through the strict render path and failed.
+        mlt_deque_pop_front(priv->queue);
+        pthread_mutex_unlock(&priv->queue_mutex);
+        return consumer_deliver_failure(self, head);
     }
 
     // Get the frame from the queue.
@@ -1593,6 +1925,11 @@ mlt_frame mlt_consumer_rt_frame(mlt_consumer self)
     mlt_properties properties = MLT_CONSUMER_PROPERTIES(self);
     consumer_private *priv = self->local;
 
+    // After a strict failure has been reported every call returns NULL until
+    // the consumer is stopped and started again.
+    if (consumer_strict_video(self) && consumer_strict_failed(self))
+        return NULL;
+
     // Check if the user has requested real time or not
     if (priv->real_time > 1 || priv->real_time < -1) {
         // see above
@@ -1612,6 +1949,10 @@ mlt_frame mlt_consumer_rt_frame(mlt_consumer self)
             priv->preroll = 0;
         }
 
+        // Once a strict failure has been reported, this run is finished.
+        if (consumer_strict_video(self) && consumer_strict_failed(self))
+            return NULL;
+
         // Get frame from queue
         pthread_mutex_lock(&priv->queue_mutex);
         mlt_log_timings_begin();
@@ -1624,11 +1965,37 @@ mlt_frame mlt_consumer_rt_frame(mlt_consumer self)
                     size = preroll_size;
                 priv->preroll = 0;
             }
+            // A strict failure stops new frames from being queued; do not wait
+            // for a size that will never arrive.
+            if (consumer_strict_video(self)
+                && (consumer_strict_stopped(self) || consumer_strict_failed(self)))
+                break;
         }
         frame = mlt_deque_pop_front(priv->queue);
         mlt_log_timings_end(NULL, "wait_for_frame_queue");
         pthread_cond_broadcast(&priv->queue_cond);
         pthread_mutex_unlock(&priv->queue_mutex);
+        if (consumer_strict_video(self)) {
+            if (frame
+                && !mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame), "rendered")) {
+                if (!mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame),
+                                            "_strict_rendered")) {
+                    // Frames rendered by this mode always carry the marker;
+                    // treat a missing render as a failure rather than fall
+                    // back to a test image.
+                    mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "video_error", 1);
+                }
+                return consumer_deliver_failure(self, frame);
+            }
+            if (consumer_strict_failed(self)) {
+                // After the failing frame every call reports NULL until the
+                // consumer is restarted.
+                if (frame)
+                    mlt_frame_close(frame);
+                return NULL;
+            }
+            return frame;
+        }
         if (priv->real_time == 1 && frame
             && !mlt_properties_get_int(MLT_FRAME_PROPERTIES(frame), "rendered")) {
             int dropped = mlt_properties_get_int(properties, "drop_count");
@@ -1641,15 +2008,38 @@ mlt_frame mlt_consumer_rt_frame(mlt_consumer self)
             priv->ahead = 1;
             mlt_events_fire(properties, "consumer-thread-started", mlt_event_data_none());
         }
+        if (consumer_strict_video(self) && consumer_strict_failed(self)) {
+            // Never hand out a frame after the failure has been reported.
+            // Restarting the consumer (start clears the state) resumes.
+            return NULL;
+        }
         // Get the frame in non real time
         frame = mlt_consumer_get_frame(self);
 
         // This isn't true, but from the consumers perspective it is
         if (frame != NULL) {
-            mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
+            int width = mlt_properties_get_int(properties, "width");
+            int height = mlt_properties_get_int(properties, "height");
+            mlt_image_format format = priv->image_format;
 
-            // WebVfx uses this to setup a consumer-stopping event handler.
             mlt_properties_set_data(MLT_FRAME_PROPERTIES(frame), "consumer", self, 0, NULL, NULL);
+
+            // In strict mode the frame handed out must have completed video
+            // rendering successfully; rendered=1 only means success.
+            if (consumer_strict_video(self)
+                && !mlt_properties_get_int(properties, "video_off")) {
+                uint8_t *image = NULL;
+                int error = consumer_render_frame(self,
+                                                  frame,
+                                                  &image,
+                                                  &format,
+                                                  &width,
+                                                  &height);
+                if (error)
+                    return consumer_deliver_failure(self, frame);
+                return frame;
+            }
+            mlt_properties_set_int(MLT_FRAME_PROPERTIES(frame), "rendered", 1);
         }
     }
 
@@ -1776,11 +2166,19 @@ void mlt_consumer_close(mlt_consumer self)
             // Make sure it only gets called once
             self->parent.close = NULL;
 
+            // A consumer can be closed without stop() having been called;
+            // release the render threads, queues and their temporary frame
+            // references here too.
+            if (atomic_load(&priv->started))
+                mlt_consumer_stop(self);
+
             // Destroy the push mutex and condition
             pthread_mutex_destroy(&priv->put_mutex);
             pthread_cond_destroy(&priv->put_cond);
 
             pthread_mutex_destroy(&priv->position_mutex);
+            pthread_mutex_destroy(&priv->strict_mutex);
+            pthread_cond_destroy(&priv->strict_cond);
 
             mlt_service_close(&self->parent);
             free(priv);

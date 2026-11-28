@@ -86,6 +86,21 @@
  * \properties \em audio_off set non-zero to disable audio processing
  * \properties \em video_off set non-zero to disable video processing
  * \properties \em drop_count the number of video frames not rendered since starting consumer
+ * \properties \em strict_video set non-zero to render video strictly for export.
+ * Only frames whose video fetch completed successfully are handed out and
+ * \em rendered is 1 only for those. The first failing program frame is not
+ * delivered: \em mlt_consumer_rt_frame returns every earlier frame in program
+ * order, then NULL for the failing frame and every call after it until stop and
+ * start again. Works for real_time 0, -1 and -2; the queue is never skipped or
+ * filled with a repeat. When \em video_off is non-zero no strict video fetch
+ * happens and the normal delivery applies. A new start clears the error state.
+ * \properties \em video_error the original error code of the first strict video
+ * failure, set at the delivery point on the thread calling \em mlt_consumer_rt_frame.
+ * \properties \em video_error_position the program position of that failing frame.
+ * \event \em consumer-video-error Fired once at the strict failure delivery
+ * point, on the thread calling \em mlt_consumer_rt_frame (not a render worker).
+ * The event data is the failing frame; its frame properties carry \em video_error
+ * and the listener may retain it by incrementing its properties reference count.
  * \properties \em color_range the color range as tv/mpeg (limited) or pc/jpeg (full); default is unset, which implies tv/mpeg
  * \properties \em color_trc the color transfer characteristic (gamma), default is unset, use mlt_color_trc string values
  * \properties \em mlt_color_trc the color transfer to use for internal processing, default is unset; use mlt_color_trc string values but only "linear" is implemented

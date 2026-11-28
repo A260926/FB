@@ -86,6 +86,18 @@ typedef int (*mlt_convert_image)(mlt_frame self,
  * \properties \em audio_channels the number of audio channels
  * \properties \em audio_samples the number of audio samples
  * \properties \em audio_format the mlt_audio_format for the audio on this frame
+ * \properties \em consumer.strict_video set non-zero to make video fetching
+ * strict: a failing get_image callback or image conversion returns its error
+ * code unchanged, is stored in \em video_error, and leaves the caller's image
+ * pointer NULL. The error is sticky for the lifetime of the frame, so later
+ * fetches return the same code without re-running the image stack. A frame with
+ * no image source at all is still a blank frame and produces the ordinary test
+ * image. This property is propagated to the frames a tractor/luma transition
+ * fetches on its behalf and across image-conversion dispatch.
+ * \properties \em video_error the original non-zero code of the first strict
+ * video failure on this frame (0 when there was none). Also used internally by
+ * transitions to carry a source's failure back to the frame that delegates the
+ * fetch.
  * \properties \em format the mlt_image_format of the image on this frame
  * \properties \em width the horizontal resolution of the image
  * \properties \em height the vertical resolution of the image
