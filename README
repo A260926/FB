@@ -97,3 +97,102 @@ and accept it fully.
 
 
 --- end of README ---
+
+==============================================================================
+Gray rasterizer band-splitting regression harness (support/)
+==============================================================================
+
+This support tree adds a numeric regression for the STANDALONE_ smooth
+(gray) rasterizer in src/smooth/ftgrays.c, focused on the horizontal
+band-splitting / render-pool overflow replay path.  No font is loaded
+and no GUI is built.  The production C source is compiled twice by
+support/CMakeLists.txt, unchanged:
+
+  ft_grays_raster        16 KiB cell pool (the default)
+  ft_grays_raster_small   2 KiB cell pool (forces more, narrower bands
+                          and more overflow bisections)
+
+The C++17 test entry is support/target.cpp; it defines no main() (the
+runner in support/runner.cpp drives the CASE-registered groups).  Run
+everything with:
+
+    bash support/run.sh target
+
+It first runs the old plain-rectangle baseline, then the three groups
+(bands, curves, layouts), then two isolated mutant builds of ftgrays.c
+(drop_band: per-band min_ey += 1; lose_parity: ignore the even-odd
+flag).  A mutant only counts as caught if the binary exits on a real
+CHECK assertion; compile failure or a crash does not count.
+
+Independent reference and its error bounds
+-------------------------------------------
+
+The rasterizer output is never trusted just because the two pool builds
+agree (they would share any fill-rule bug).  target.cpp contains an
+independent double-precision reference that calls none of FreeType's
+decomposition, subdivision, winding or coverage code:
+
+  * Beziers are flattened adaptively.  A segment is accepted only when
+    every control point is within kFlat (1e-4 px) of its chord; each
+    bisection shrinks that deviation by 4x, and subdivision is capped at
+    24 levels.  The boundary displacement is therefore <= kFlat, and the
+    area error of any pixel the edge crosses is below ~2*kFlat px^2,
+    i.e. under 0.06 of a 0..255 gray level -- well inside the required
+    0.5-gray reference budget.
+  * For each pixel row, segment/scanline intersections are computed in
+    double and combined with the requested topology: a running signed
+    winding number for the non-zero rule, a parity toggle for
+    even-odd.  Inside a y-slice without segment endpoints, each fill
+    interval boundary is linear in y; the heights where a boundary
+    crosses a column edge are solved directly and each piece is
+    integrated exactly (trapezoid), so coverage is analytic for the
+    flattened path.
+  * The reference self-validates against a closed-form axis-aligned
+    rectangle coverage formula (including a fractional rectangle and an
+    exact 0/255 integer rectangle); its own measured error stays below
+    0.5 gray.  A separate point-in-polygon supersampler was used during
+    development to cross-check the analytic integration.
+
+Comparison tolerances are deliberately tight and distinct:
+straight-edged material must match within 1 gray level, fixed curve
+cases within 4.  The tolerance is never widened to hide a missing row.
+
+Why the band material is large enough
+--------------------------------------
+
+The bands fixture spans 140 px of height and carries 24 full-height
+narrow strips plus disjoint solid blocks, producing ~35 contours and
+well over a hundred points.  On the 2 KiB pool (512 cells) the initial
+48-row bands overflow and are bisected repeatedly (48 -> 24 -> 12 -> 6
+-> 3); trace builds show well over one hundred bisections, and the 16 KiB
+pool also overflows and bisects its single band independently at
+different cuts (about a dozen bisections).  Density is tuned so the
+narrowest (3-row) band still fits, avoiding the rasterizer's "rotten
+glyph" abort while guaranteeing multi-level replay.  Gentle curved
+caps are placed on both sides of the initial cuts (48, 96) and the
+bisection cuts, so a dropped first band row or a lost curve segment
+changes pixels the independent reference catches.  Integer, negative
+integer, and negative fractional 26.6 translations are all exercised.
+
+Only short, wide, very shallow arcs are used for the curved material.
+The production flattener's per-arc error grows with the arc bulge, so
+cubic caps span >= 12 px with a 0.2 px bulge and conic caps use a
+0.02 px bulge; these are genuine non-linear curves (the reference
+integrates the exact Bezier), but stay inside the 4-gray budget on both
+pools.  Straight strips and walls provide the band-overflow pressure.
+
+What is not covered
+-------------------
+
+  * Steep or strongly curved (high-bulge) Beziers, S-shaped inflections
+    with large excursions, and self-intersecting contours: the
+    production flattener's approximation error on such geometry exceeds
+    the 4-gray curve budget against an exact reference, so they are
+    intentionally excluded rather than masked by a loose tolerance.
+  * Even-odd area on overlapping sub-pixel boundaries (per the task
+    scope); contours are kept disjoint with >= 2 px clearance.
+  * LCD / LCD-V color modes, monochrome (1-bit) rendering, and any
+    non-STANDALONE_ build path.
+  * Dropout / stub control flags and hinting; the rasterizer ignores
+    these in the exercised configuration.
+
