@@ -1,0 +1,111 @@
+{
+  "repo": "https://github.com/prideout/par",
+  "commit": "68e1215a055ccbeae378dd5969e09d0c79963a4a",
+  "license": "MIT",
+  "gitlinks": [],
+  "symlinks": [],
+  "included": [
+    {
+      "path": "par_shapes.h",
+      "sha256": "672cd5c0f26fbda832de8adab0a3de26eb9c3100fff7dd921163a93c44fab784",
+      "mode": "100644"
+    },
+    {
+      "path": "test/test_shapes.c",
+      "sha256": "e58fb6df7ad95e89c6d0afc6fc765778e18f22e8255c376b95c257b5a2067483",
+      "mode": "100644"
+    },
+    {
+      "path": "README.md",
+      "sha256": "410646bdc251cee240b8f8ffc0bfd91ef1c091484bd3e5a6834c898115dc5dbf",
+      "mode": "100644"
+    },
+    {
+      "path": "test/describe.h",
+      "sha256": "85432bfafe53a9010ce9ce49c80011eba1b0b00964c8d73d3a3663177200bbdd",
+      "mode": "100644"
+    },
+    {
+      "path": "test/console-colors.h",
+      "sha256": "cde274167c8f4b5618f6c75195a6d095e949ca9cf341ecebbccc17e0a2ce0468",
+      "mode": "100644"
+    },
+    {
+      "path": "test/assertion-macros.h",
+      "sha256": "f03cecbb07763ac1170da5645dbd31541a48f15b2122ef0425366f76991a08a4",
+      "mode": "100644"
+    },
+    {
+      "path": "test/console-colors.c",
+      "sha256": "e2392df987f9da8817f4b3d133bc3f9982b165e88e65cda33fb92907450e99b7",
+      "mode": "100644"
+    }
+  ],
+  "excluded": [
+    ".gitignore",
+    ".travis.yml",
+    "par_bluenoise.h",
+    "par_bubbles.h",
+    "par_camera_control.h",
+    "par_easings.h",
+    "par_easycurl.h",
+    "par_filecache.h",
+    "par_msquares.h",
+    "par_octasphere.h",
+    "par_sprune.h",
+    "par_streamlines.h",
+    "par_string_blocks.h",
+    "test/CMakeLists.txt",
+    "test/boxes.py",
+    "test/cgltf.h",
+    "test/cgltf_write.h",
+    "test/flare.json",
+    "test/gen_rgb_png.py",
+    "test/getcolors.py",
+    "test/hierarchy.py",
+    "test/lodepng.c",
+    "test/lodepng.h",
+    "test/lz4.c",
+    "test/lz4.cpp",
+    "test/lz4.h",
+    "test/msquares.html",
+    "test/msquares.svg",
+    "test/msquares_diagram.jpg",
+    "test/octasphere_color.png",
+    "test/octasphere_normal.png",
+    "test/octasphere_orm.png",
+    "test/packd3.html",
+    "test/par_asset.h",
+    "test/rgb.png",
+    "test/rgba.png",
+    "test/sds.c",
+    "test/sds.h",
+    "test/sdsalloc.h",
+    "test/test_bluenoise.c",
+    "test/test_bubbles.c",
+    "test/test_c.c",
+    "test/test_cpp.cpp",
+    "test/test_filecache.c",
+    "test/test_filecache_lz4.c",
+    "test/test_linkage.c",
+    "test/test_linkage.cpp",
+    "test/test_msquares.c",
+    "test/test_octasphere.cpp",
+    "test/test_sprune.c",
+    "test/test_strings.cpp",
+    "test/tverts.png",
+    "test/whereami.c",
+    "test/whereami.h",
+    "tools/.uncrustify",
+    "tools/aliases.sh",
+    "tools/format.py"
+  ],
+  "exclusion_reason": "仅par_shapes生产闭包与实际联跑的上游test_shapes及其辅助源码；其余独立库/工具/素材均未用于运行。保留test/console-colors.c内BSD许可。",
+  "repair_provenance": {
+    "reused_source_manifest": "seed/SOURCE.json",
+    "new_upstream_file": "test/console-colors.c",
+    "git_blob": "3a543ccb2d009ec359322bbedca5cd7cef43aaf0",
+    "unchanged_production_sha256": "672cd5c0f26fbda832de8adab0a3de26eb9c3100fff7dd921163a93c44fab784",
+    "original_source_commit": "68e1215a055ccbeae378dd5969e09d0c79963a4a"
+  }
+}
