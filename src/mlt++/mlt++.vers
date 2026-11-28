@@ -735,3 +735,10 @@ MLT_7.42.0 {
       "Mlt::Producer::pass_frame_properties(Mlt::Frame&)";
     };
 } MLT_7.36.0;
+
+MLT_7.44.0 {
+  global:
+    extern "C++" {
+      "Mlt::Playlist::roll_mix(int, int)";
+    };
+} MLT_7.42.0;

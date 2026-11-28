@@ -121,6 +121,7 @@ MLT_EXPORT int mlt_playlist_mix(mlt_playlist self, int clip, int length, mlt_tra
 MLT_EXPORT int mlt_playlist_mix_in(mlt_playlist self, int clip, int length);
 MLT_EXPORT int mlt_playlist_mix_out(mlt_playlist self, int clip, int length);
 MLT_EXPORT int mlt_playlist_mix_add(mlt_playlist self, int clip, mlt_transition transition);
+MLT_EXPORT int mlt_playlist_roll_mix(mlt_playlist self, int mix_index, mlt_position delta);
 MLT_EXPORT mlt_producer mlt_playlist_get_clip(mlt_playlist self, int clip);
 MLT_EXPORT mlt_producer mlt_playlist_get_clip_at(mlt_playlist self, mlt_position position);
 MLT_EXPORT int mlt_playlist_get_clip_index_at(mlt_playlist self, mlt_position position);
