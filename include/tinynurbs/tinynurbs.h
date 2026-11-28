@@ -10,5 +10,6 @@
 #include "core/curve.h"
 #include "core/evaluate.h"
 #include "core/modify.h"
+#include "core/ray_scene.h"
 #include "core/surface.h"
 #include "io/obj.h"

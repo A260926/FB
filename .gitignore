@@ -33,3 +33,6 @@
 
 # Other
 build/*
+
+# Task harness build output
+.task-build/
