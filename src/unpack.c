@@ -49,6 +49,77 @@ extern void ASMCALL DECORR_MONO_PASS_CONT (struct decorr_pass *dpp, int32_t *buf
 
 #define LOSSY_MUTE
 
+#ifdef WAVPACK_DECORR_OBSERVE
+
+// Read-only observation points used only by the decorrelation regression
+// tests. These are compiled into a separate library build (WAVPACK_DECORR_OBSERVE)
+// and are never referenced by the normal library. They record the entropy
+// residuals entering the decorrelation passes and a few state fields after
+// each pass; they never alter any value used for decoding.
+
+static WavpackDecorrResidualObs decorr_residual_obs;
+static WavpackDecorrStateObs decorr_state_obs;
+static void *decorr_obs_ctx;
+
+void WavpackSetDecorrObserver (WavpackDecorrResidualObs residual_obs,
+    WavpackDecorrStateObs state_obs, void *ctx)
+{
+    decorr_residual_obs = residual_obs;
+    decorr_state_obs = state_obs;
+    decorr_obs_ctx = ctx;
+}
+
+static void decorr_observe_residuals (WavpackStream *wps, int pass_index, int pass_count,
+    int32_t *buffer, uint32_t start, uint32_t count)
+{
+    uint32_t sample, nchan = (wps->wphdr.flags & MONO_DATA) ? 1 : 2;
+
+    if (!decorr_residual_obs)
+        return;
+
+    for (sample = start; sample < count; sample++)
+        for (int ch = 0; ch < (int) nchan; ch++)
+            decorr_residual_obs (decorr_obs_ctx, wps->stream_index, pass_index, pass_count,
+                wps->sample_index + sample, ch, buffer [sample * nchan + ch]);
+}
+
+static void decorr_observe_pass_state (WavpackStream *wps, struct decorr_pass *dpp,
+    int pass_index, int32_t sample_index)
+{
+    if (!decorr_state_obs)
+        return;
+
+    decorr_state_obs (decorr_obs_ctx, wps->stream_index, pass_index, sample_index, 0,
+        "pass_weight_A", dpp->weight_A, dpp->term);
+    decorr_state_obs (decorr_obs_ctx, wps->stream_index, pass_index, sample_index, 1,
+        "pass_weight_B", dpp->weight_B, dpp->term);
+}
+
+static void decorr_observe_final_state (WavpackStream *wps, int32_t last_sample_index)
+{
+    struct decorr_pass *dpp;
+    int pass_index = 0, tcount;
+
+    if (!decorr_state_obs)
+        return;
+
+    for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++, pass_index++) {
+        decorr_state_obs (decorr_obs_ctx, wps->stream_index, pass_index, last_sample_index, 0,
+            "weight_A", dpp->weight_A, dpp->term);
+        decorr_state_obs (decorr_obs_ctx, wps->stream_index, pass_index, last_sample_index, 1,
+            "weight_B", dpp->weight_B, dpp->term);
+
+        for (int k = 0; k < MAX_TERM; k++) {
+            decorr_state_obs (decorr_obs_ctx, wps->stream_index, pass_index, last_sample_index, 0,
+                "history_A", dpp->samples_A [k], k);
+            decorr_state_obs (decorr_obs_ctx, wps->stream_index, pass_index, last_sample_index, 1,
+                "history_B", dpp->samples_B [k], k);
+        }
+    }
+}
+
+#endif
+
 ///////////////////////////// executable code ////////////////////////////////
 
 // This monster actually unpacks the WavPack bitstream(s) into the specified
@@ -135,6 +206,22 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
                     ((flags & MAG_MASK) >> MAG_LSB) > 15);
             }
 #else
+#ifdef WAVPACK_DECORR_OBSERVE
+        if (decorr_residual_obs && wps->num_terms) {
+            int pass_index = 0;
+
+            decorr_observe_residuals (wps, pass_index, wps->num_terms, buffer, 0, sample_count);
+
+            for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++, pass_index++) {
+                decorr_mono_pass (dpp, buffer, sample_count);
+                decorr_observe_pass_state (wps, dpp, pass_index, wps->sample_index + sample_count - 1);
+
+                if (pass_index + 1 < wps->num_terms)
+                    decorr_observe_residuals (wps, pass_index + 1, wps->num_terms, buffer, 0, sample_count);
+            }
+        }
+        else
+#endif
         for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
             decorr_mono_pass (dpp, buffer, sample_count);
 #endif
@@ -180,6 +267,22 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
 
 #ifdef DECORR_STEREO_PASS_CONT
         if (sample_count < 16 || !DECORR_STEREO_PASS_CONT_AVAILABLE) {
+#ifdef WAVPACK_DECORR_OBSERVE
+            if (decorr_residual_obs && wps->num_terms) {
+                int pass_index = 0;
+
+                decorr_observe_residuals (wps, pass_index, wps->num_terms, buffer, 0, sample_count);
+
+                for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++, pass_index++) {
+                    decorr_stereo_pass (dpp, buffer, sample_count);
+                    decorr_observe_pass_state (wps, dpp, pass_index, wps->sample_index + sample_count - 1);
+
+                    if (pass_index + 1 < wps->num_terms)
+                        decorr_observe_residuals (wps, pass_index + 1, wps->num_terms, buffer, 0, sample_count);
+                }
+            }
+            else
+#endif
             for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
                 decorr_stereo_pass (dpp, buffer, sample_count);
 
@@ -195,6 +298,22 @@ int32_t unpack_samples (WavpackStream *wps, int32_t *buffer, uint32_t sample_cou
                     ((flags & MAG_MASK) >> MAG_LSB) >= 16);
             }
 #else
+#ifdef WAVPACK_DECORR_OBSERVE
+        if (decorr_residual_obs && wps->num_terms) {
+            int pass_index = 0;
+
+            decorr_observe_residuals (wps, pass_index, wps->num_terms, buffer, 0, sample_count);
+
+            for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++, pass_index++) {
+                decorr_stereo_pass (dpp, buffer, sample_count);
+                decorr_observe_pass_state (wps, dpp, pass_index, wps->sample_index + sample_count - 1);
+
+                if (pass_index + 1 < wps->num_terms)
+                    decorr_observe_residuals (wps, pass_index + 1, wps->num_terms, buffer, 0, sample_count);
+            }
+        }
+        else
+#endif
         for (tcount = wps->num_terms, dpp = wps->decorr_passes; tcount--; dpp++)
             decorr_stereo_pass (dpp, buffer, sample_count);
 
@@ -479,6 +598,11 @@ get_word_eof:
                     m = (m + 1) & (MAX_TERM - 1);
                 }
             }
+
+#ifdef WAVPACK_DECORR_OBSERVE
+    if (decorr_state_obs && wps->num_terms && i)
+        decorr_observe_final_state (wps, wps->sample_index + i - 1);
+#endif
 
     fixup_samples (wps, buffer, i);
 

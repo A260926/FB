@@ -479,6 +479,26 @@ struct WavpackContext {
         weight = (weight ^ s) - s; \
     }
 
+// Optional read-only observation points for the decorrelation regression tests.
+// Only compiled into a library built with WAVPACK_DECORR_OBSERVE defined; the
+// normal library has no callbacks, globals, or extra state. The callbacks are
+// invoked from the C decoder only (never from the assembly paths) and never
+// change any decision made by the decoder.
+
+#ifdef WAVPACK_DECORR_OBSERVE
+
+#define WAVPACK_DECORR_OBS
+
+typedef void (*WavpackDecorrResidualObs)(void *ctx, int stream_index, int pass_index,
+    int pass_count, int32_t sample_index, int channel, int32_t residual);
+typedef void (*WavpackDecorrStateObs)(void *ctx, int stream_index, int pass_index,
+    int32_t sample_index, int channel, const char *field, int64_t value, int64_t aux);
+
+void WavpackSetDecorrObserver (WavpackDecorrResidualObs residual_obs,
+    WavpackDecorrStateObs state_obs, void *ctx);
+
+#endif
+
 void pack_init (WavpackStream *wps);
 int pack_block (WavpackStream *wps, int32_t *buffer);
 void send_general_metadata (WavpackStream *wps);
