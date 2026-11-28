@@ -5,5 +5,6 @@ us at <vixl@arm.com>.
 You can also have a look at the ['getting started' page](../getting-started-aarch64.md).
 
 * [Extending and customizing the disassembler](extending-the-disassembler.md)
+* [CPU feature requirements](cpu-feature-requirements.md)
 * [Using VIM YouCompleteMe with VIXL](ycm.md)
 * [Debugging with the VIXL Simulator](simulator-debugger.md)

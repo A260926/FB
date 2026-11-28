@@ -78,6 +78,8 @@ class CPUFeaturesAuditor : public DecoderVisitor {
   void ResetSeenFeatures() {
     seen_ = CPUFeatures::None();
     last_instruction_ = CPUFeatures::None();
+    seen_requirements_ = CPUFeatureRequirements();
+    last_requirements_ = CPUFeatureRequirements();
   }
 
   // Query or set available CPUFeatures.
@@ -87,11 +89,34 @@ class CPUFeaturesAuditor : public DecoderVisitor {
   }
 
   // Query CPUFeatures seen since construction (or the last call to `Reset()`).
+  //
+  // This is the legacy interface. It records, for instructions whose encoding
+  // can be provided by more than one feature, a single feature selected using
+  // the `available` hint (or both features when no hint applies).
   const CPUFeatures& GetSeenFeatures() const { return seen_; }
 
   // Query CPUFeatures from the last instruction visited by this auditor.
+  // This is the legacy interface; see `GetSeenFeatures()`.
   const CPUFeatures& GetInstructionFeatures() const {
     return last_instruction_;
+  }
+
+  // Query the features required by the last instruction visited by this
+  // auditor. Unlike `GetInstructionFeatures()`, alternatives are represented
+  // exactly and are not influenced by the `available` hint. The result is a
+  // self-contained value, so a saved copy is unaffected by later decoding,
+  // `ResetSeenFeatures()` or `SetAvailableFeatures()`.
+  CPUFeatureRequirements GetInstructionRequirements() const {
+    return last_requirements_;
+  }
+
+  // Query the combined requirements of every instruction seen since
+  // construction or the last call to `ResetSeenFeatures()`. Alternatives are
+  // conjoined across instructions: a feature set satisfies the result exactly
+  // when it satisfies every instruction's own requirements. As above, the
+  // result is a self-contained value.
+  CPUFeatureRequirements GetSeenRequirements() const {
+    return seen_requirements_;
   }
 
   bool InstructionIsAvailable() const {
@@ -122,6 +147,11 @@ class CPUFeaturesAuditor : public DecoderVisitor {
   CPUFeatures seen_;
   CPUFeatures last_instruction_;
   CPUFeatures available_;
+
+  // Accurate, alternative-aware counterparts of `seen_` and
+  // `last_instruction_`. These are unaffected by `available_`.
+  CPUFeatureRequirements seen_requirements_;
+  CPUFeatureRequirements last_requirements_;
 
   Decoder* decoder_;
 

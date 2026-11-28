@@ -326,6 +326,7 @@ class PrintDisassembler : public Disassembler {
       : cpu_features_auditor_(NULL),
         cpu_features_prefix_("// Needs: "),
         cpu_features_suffix_(""),
+        exact_cpu_features_(false),
         signed_addresses_(false),
         stream_(stream) {}
 
@@ -355,6 +356,18 @@ class PrintDisassembler : public Disassembler {
     cpu_features_suffix_ = suffix;
   }
 
+  // By default, annotations use the auditor's legacy feature sets, so each
+  // instruction is annotated with a single feature set (minus the available
+  // features).
+  //
+  // With `SetExactCPUFeatures(true)`, annotations instead use the auditor's
+  // CPUFeatureRequirements. Every distinct minimal alternative not already
+  // satisfied by the available features is printed, in parentheses, with
+  // alternatives separated by " | ". For example, an unannotated `ldr d0,
+  // [x1]` with no available features is printed as `(FP) | (NEON)`. The
+  // prefix, suffix and indentation are the same in both modes.
+  void SetExactCPUFeatures(bool exact) { exact_cpu_features_ = exact; }
+
   // By default, addresses are printed as simple, unsigned 64-bit hex values.
   //
   // With `PrintSignedAddresses(true)`:
@@ -368,9 +381,15 @@ class PrintDisassembler : public Disassembler {
  protected:
   virtual void ProcessOutput(const Instruction* instr) VIXL_OVERRIDE;
 
+  // Build the exact-mode annotation (without prefix, suffix or padding) for
+  // the last instruction visited by the auditor, given the available features.
+  // Returns an empty string if no annotation is needed.
+  std::string FormatExactCPUFeatures(const Instruction* instr);
+
   CPUFeaturesAuditor* cpu_features_auditor_;
   const char* cpu_features_prefix_;
   const char* cpu_features_suffix_;
+  bool exact_cpu_features_;
   bool signed_addresses_;
 
  private:

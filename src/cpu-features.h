@@ -27,8 +27,11 @@
 #ifndef VIXL_CPU_FEATURES_H
 #define VIXL_CPU_FEATURES_H
 
+#include <algorithm>
 #include <bitset>
+#include <initializer_list>
 #include <ostream>
+#include <vector>
 
 #include "globals-vixl.h"
 
@@ -501,6 +504,185 @@ class CPUFeaturesScope {
  private:
   CPUFeatures* const cpu_features_;
   const CPUFeatures old_features_;
+};
+
+
+// Order CPUFeatures lexicographically by feature enumeration order. This makes
+// CPUFeatureRequirements deterministic regardless of how they were built.
+inline bool operator<(const CPUFeatures& a, const CPUFeatures& b) {
+  CPUFeatures::const_iterator it_a = a.begin();
+  CPUFeatures::const_iterator it_b = b.begin();
+  while ((it_a != a.end()) && (it_b != b.end())) {
+    if (*it_a != *it_b) return *it_a < *it_b;
+    ++it_a;
+    ++it_b;
+  }
+  // If the common prefix is identical, the shorter set sorts first.
+  return (it_a == a.end()) && (it_b != b.end());
+}
+
+
+// A description of the CPU features that an instruction -- or a sequence of
+// instructions -- needs in order to execute.
+//
+// Some encodings can be provided by more than one hardware feature. For
+// example, `ldr d0, [x1]` can be implemented by either FP or NEON. A plain
+// CPUFeatures set cannot represent that: recording both would claim that both
+// are required, and recording one would depend on an arbitrary choice.
+//
+// CPUFeatureRequirements models this as a disjunction of alternatives. Each
+// alternative is a CPUFeatures set that is *sufficient* on its own, so the
+// requirements are satisfied when the available features contain all of the
+// features in at least one alternative. The empty set is a valid (and very
+// common) alternative: it means that the instruction needs no extra features.
+//
+// Constructors and `Combine()` normalise the alternatives:
+//  - exact duplicates are removed,
+//  - an alternative that is a strict superset of another alternative is
+//    redundant and is removed, and
+//  - alternatives are ordered to make the representation deterministic.
+//
+// This type only describes features that VIXL already knows about; it does not
+// validate or justify any particular encoding.
+class CPUFeatureRequirements {
+ public:
+  // The empty requirements: no extra features are needed.
+  CPUFeatureRequirements() { alternatives_.push_back(CPUFeatures::None()); }
+
+  // Requirements that are exactly `features`.
+  explicit CPUFeatureRequirements(const CPUFeatures& features) {
+    alternatives_.push_back(features);
+  }
+
+  // Requirements that can be satisfied by any one of `alternatives`.
+  explicit CPUFeatureRequirements(
+      std::initializer_list<CPUFeatures> alternatives) {
+    for (const CPUFeatures& alternative : alternatives) {
+      AddAlternative(alternative);
+    }
+    Normalise();
+  }
+
+  // Requirements that can be satisfied by any one of `alternatives`.
+  explicit CPUFeatureRequirements(
+      const std::vector<CPUFeatures>& alternatives) {
+    for (const CPUFeatures& alternative : alternatives) {
+      AddAlternative(alternative);
+    }
+    Normalise();
+  }
+
+  // The alternatives that would each satisfy these requirements. At least one
+  // alternative is always present; an empty CPUFeatures element means that no
+  // extra features are required.
+  const std::vector<CPUFeatures>& GetAlternatives() const {
+    return alternatives_;
+  }
+
+  // True if at least one alternative is a subset of `available`.
+  bool IsSatisfiedBy(const CPUFeatures& available) const {
+    for (const CPUFeatures& alternative : alternatives_) {
+      if (available.Has(alternative)) return true;
+    }
+    return false;
+  }
+
+  // True if no alternative requires any features.
+  bool IsEmpty() const {
+    for (const CPUFeatures& alternative : alternatives_) {
+      if (alternative.HasNoFeatures()) return true;
+    }
+    return false;
+  }
+
+  // Combine two requirements. The result means "both requirements must be
+  // met", which is the conjunction of the disjunctions: every alternative of
+  // one requirement is merged with every alternative of the other.
+  void Combine(const CPUFeatureRequirements& other) {
+    std::vector<CPUFeatures> combined;
+    combined.reserve(alternatives_.size() * other.alternatives_.size());
+    for (const CPUFeatures& mine : alternatives_) {
+      for (const CPUFeatures& theirs : other.alternatives_) {
+        combined.push_back(mine.With(theirs));
+      }
+    }
+    alternatives_.swap(combined);
+    Normalise();
+  }
+
+  // Add a single alternative, normalising the result. This is convenient for
+  // building requirements incrementally.
+  void CombineAlternative(const CPUFeatures& alternative) {
+    AddAlternative(alternative);
+    Normalise();
+  }
+
+  bool operator==(const CPUFeatureRequirements& other) const {
+    if (alternatives_.size() != other.alternatives_.size()) return false;
+    for (size_t i = 0; i < alternatives_.size(); ++i) {
+      if (alternatives_[i] != other.alternatives_[i]) return false;
+    }
+    return true;
+  }
+  bool operator!=(const CPUFeatureRequirements& other) const {
+    return !(*this == other);
+  }
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const CPUFeatureRequirements& requirements) {
+    // Print each alternative in parentheses, separated by " | ". This matches
+    // the notation used by the disassembler's annotations.
+    bool need_separator = false;
+    for (const CPUFeatures& alternative : requirements.alternatives_) {
+      if (need_separator) os << " | ";
+      need_separator = true;
+      os << "(" << alternative << ")";
+    }
+    return os;
+  }
+
+ private:
+  void AddAlternative(const CPUFeatures& alternative) {
+    // Avoid duplicates early; Normalise() deals with redundancies.
+    for (const CPUFeatures& existing : alternatives_) {
+      if (existing == alternative) return;
+    }
+    alternatives_.push_back(alternative);
+  }
+
+  // Remove alternatives that are implied by another one, and sort the rest so
+  // that the representation is canonical.
+  void Normalise() {
+    // A superset alternative is never needed, because it is satisfied only
+    // when a smaller (strict subset) alternative is also satisfied.
+    std::vector<CPUFeatures> reduced;
+    for (size_t i = 0; i < alternatives_.size(); ++i) {
+      bool redundant = false;
+      for (size_t j = 0; j < alternatives_.size(); ++j) {
+        if (i == j) continue;
+        // `alternatives_[j]` is a strict subset of `alternatives_[i]`, so `i`
+        // is redundant. Note that CPUFeatures::Has() treats an empty set as a
+        // subset of everything.
+        if (alternatives_[i].Has(alternatives_[j]) &&
+            alternatives_[i] != alternatives_[j]) {
+          redundant = true;
+          break;
+        }
+        // If two alternatives are equal, keep exactly one of them.
+        if (i > j && alternatives_[i] == alternatives_[j]) {
+          redundant = true;
+          break;
+        }
+      }
+      if (!redundant) reduced.push_back(alternatives_[i]);
+    }
+    alternatives_.swap(reduced);
+    std::sort(alternatives_.begin(), alternatives_.end());
+    // There is always a way to satisfy "nothing in particular".
+    if (alternatives_.empty()) alternatives_.push_back(CPUFeatures::None());
+  }
+
+  std::vector<CPUFeatures> alternatives_;
 };
 
 

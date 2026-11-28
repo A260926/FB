@@ -7675,9 +7675,19 @@ void PrintDisassembler::ProcessOutput(const Instruction *instr) {
                               instr->GetInstructionBits(),
                               GetOutput());
   if (cpu_features_auditor_ != NULL) {
-    CPUFeatures needs = cpu_features_auditor_->GetInstructionFeatures();
-    needs.Remove(cpu_features_auditor_->GetAvailableFeatures());
-    if (needs != CPUFeatures::None()) {
+    std::string annotation;
+    if (exact_cpu_features_) {
+      annotation = FormatExactCPUFeatures(instr);
+    } else {
+      CPUFeatures needs = cpu_features_auditor_->GetInstructionFeatures();
+      needs.Remove(cpu_features_auditor_->GetAvailableFeatures());
+      if (needs != CPUFeatures::None()) {
+        std::stringstream features;
+        features << needs;
+        annotation = features.str();
+      }
+    }
+    if (!annotation.empty()) {
       // Try to align annotations. This value is arbitrary, but based on looking
       // good with most instructions. Note that, for historical reasons, the
       // disassembly itself is printed with tab characters, so bytes_printed is
@@ -7691,16 +7701,41 @@ void PrintDisassembler::ProcessOutput(const Instruction *instr) {
       int pad = std::max(min_pad, (indent_to - bytes_printed));
       fprintf(stream_, "%*s", pad, "");
 
-      std::stringstream features;
-      features << needs;
       fprintf(stream_,
               "%s%s%s",
               cpu_features_prefix_,
-              features.str().c_str(),
+              annotation.c_str(),
               cpu_features_suffix_);
     }
   }
   fprintf(stream_, "\n");
+}
+
+std::string PrintDisassembler::FormatExactCPUFeatures(const Instruction *instr) {
+  USE(instr);
+  VIXL_ASSERT(cpu_features_auditor_ != NULL);
+
+  const CPUFeatureRequirements &requirements =
+      cpu_features_auditor_->GetInstructionRequirements();
+  const CPUFeatures &available = cpu_features_auditor_->GetAvailableFeatures();
+
+  // Work out what is still missing for each alternative. If any alternative is
+  // already satisfied, the instruction needs no annotation at all.
+  std::vector<CPUFeatures> remaining;
+  for (const CPUFeatures &alternative : requirements.GetAlternatives()) {
+    CPUFeatures missing = alternative.Without(available);
+    if (missing.HasNoFeatures()) return std::string();
+    remaining.push_back(missing);
+  }
+
+  // Normalise the remaining alternatives so that duplicates and supersets are
+  // not listed. An empty result implies that the instruction is already
+  // satisfied, which was handled above.
+  CPUFeatureRequirements reduced(remaining);
+
+  std::stringstream features;
+  features << reduced;
+  return features.str();
 }
 
 }  // namespace aarch64
