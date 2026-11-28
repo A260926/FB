@@ -79,6 +79,12 @@ public:
     bool HasKeyFrame() const
     { return has_key_frame_; }
 
+    // Stamps the 12-byte RTP header of pkt (at data + RTP_TCP_HEAD_SIZE)
+    // from the given header template; marker/timestamp come from pkt and
+    // the sequence number from the caller. Shared by the network send
+    // path and the MediaSession timed-replay pump.
+    static void FillRtpHeader(RtpPacket& pkt, RtpHeader& header, uint16_t sequence);
+
 private:
     friend class RtspConnection;
     friend class MediaSession;

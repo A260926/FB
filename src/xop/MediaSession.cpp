@@ -52,6 +52,10 @@ void MediaSession::AddNotifyDisconnectedCallback(const NotifyDisconnectedCallbac
 
 bool MediaSession::AddSource(MediaChannelId channel_id, MediaSource* source)
 {
+	if (replay_enabled_) {
+		return false;
+	}
+
 	source->SetSendFrameCallback([this](MediaChannelId channel_id, RtpPacket pkt) {
 		std::forward_list<std::shared_ptr<RtpConnection>> clients;
 		std::map<int, RtpPacket> packets;
@@ -105,6 +109,10 @@ bool MediaSession::AddSource(MediaChannelId channel_id, MediaSource* source)
 
 bool MediaSession::RemoveSource(MediaChannelId channel_id)
 {
+	if (replay_enabled_) {
+		return false;
+	}
+
 	media_sources_[channel_id] = nullptr;
 	return true;
 }
@@ -201,6 +209,10 @@ MediaSource* MediaSession::GetMediaSource(MediaChannelId channel_id)
 bool MediaSession::HandleFrame(MediaChannelId channel_id, AVFrame frame)
 {
 	std::lock_guard<std::mutex> lock(mutex_);
+
+	if (replay_enabled_) {
+		return false;
+	}
 
 	if(media_sources_[channel_id]) {
 		media_sources_[channel_id]->HandleFrame(channel_id, frame);

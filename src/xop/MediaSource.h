@@ -32,6 +32,13 @@ public:
 	virtual std::string GetAttribute()  = 0;
 
 	virtual bool HandleFrame(MediaChannelId channelId, AVFrame frame) = 0;
+
+	// Packetizes a frame with the production fragmentation logic, using
+	// frame.timestamp verbatim (no wall-clock fallback for timestamp==0).
+	// Used by MediaSession timed replay; live ingress keeps HandleFrame().
+	virtual bool PacketizeFrame(MediaChannelId channelId, AVFrame frame)
+	{ return HandleFrame(channelId, frame); }
+
 	virtual void SetSendFrameCallback(const SendFrameCallback callback)
 	{ send_frame_callback_ = callback; }
 

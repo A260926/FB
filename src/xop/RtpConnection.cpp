@@ -223,13 +223,19 @@ void RtpConnection::SetFrameType(uint8_t frame_type)
 	}
 }
 
+void RtpConnection::FillRtpHeader(RtpPacket& pkt, RtpHeader& header, uint16_t sequence)
+{
+	header.marker = pkt.last;
+	header.ts = htonl(pkt.timestamp);
+	header.seq = htons(sequence);
+	memcpy(pkt.data.get()+RTP_TCP_HEAD_SIZE, &header, RTP_HEADER_SIZE);
+}
+
 void RtpConnection::SetRtpHeader(MediaChannelId channel_id, RtpPacket pkt)
 {
 	if((media_channel_info_[channel_id].is_play || media_channel_info_[channel_id].is_record) && has_key_frame_) {
-		media_channel_info_[channel_id].rtp_header.marker = pkt.last;
-		media_channel_info_[channel_id].rtp_header.ts = htonl(pkt.timestamp);
-		media_channel_info_[channel_id].rtp_header.seq = htons(media_channel_info_[channel_id].packet_seq++);
-		memcpy(pkt.data.get()+4, &media_channel_info_[channel_id].rtp_header, RTP_HEADER_SIZE);
+		FillRtpHeader(pkt, media_channel_info_[channel_id].rtp_header,
+					media_channel_info_[channel_id].packet_seq++);
 	}
 }
 

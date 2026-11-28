@@ -28,6 +28,10 @@ public:
 
 	virtual bool HandleFrame(MediaChannelId channel_id, AVFrame frame);
 
+	// Same production packetization as HandleFrame(), but the frame
+	// timestamp is always used as given (0 stays 0, no live clock fallback).
+	virtual bool PacketizeFrame(MediaChannelId channel_id, AVFrame frame);
+
 	static uint32_t GetTimestamp();
 	
 private:

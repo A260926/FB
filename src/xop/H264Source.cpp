@@ -49,12 +49,17 @@ string H264Source::GetAttribute()
 
 bool H264Source::HandleFrame(MediaChannelId channel_id, AVFrame frame)
 {
-    uint8_t* frame_buf  = frame.buffer.get();
-    uint32_t frame_size = frame.size;
-
     if (frame.timestamp == 0) {
 	    frame.timestamp = GetTimestamp();
-    }    
+    }
+
+    return PacketizeFrame(channel_id, frame);
+}
+
+bool H264Source::PacketizeFrame(MediaChannelId channel_id, AVFrame frame)
+{
+    uint8_t* frame_buf  = frame.buffer.get();
+    uint32_t frame_size = frame.size;
 
     if (frame_size <= MAX_RTP_PAYLOAD_SIZE) {
         RtpPacket rtp_pkt;
