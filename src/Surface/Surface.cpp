@@ -763,40 +763,72 @@ Surface Surface::InsertKnotV(std::span<Numeric> knots_to_insert) const
 
 std::tuple<Surface, int> Surface::RemoveKnotU(Numeric knot_remove, int times, Numeric tolerance) const
 {
-    Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount - times, points_ref.VCount};
-    int t = 0;
-    for (int it_v = 0; it_v < ControlPoints.VCount; ++it_v)
+    // Every control row along U is treated as a parallel curve on the shared
+    // U knot vector.  The shared helper picks one common removal count for all
+    // rows, so the reduced grid always lies on a single common knot basis.
+    std::vector<std::vector<Vec4>> rows;
+    rows.reserve(ControlPoints.VCount);
+    for (int v = 0; v < ControlPoints.VCount; ++v)
     {
-        auto knots = result.KnotsU;
-        auto points = this->ControlPoints.GetV(it_v);
-        int t_tmp = KnotRemoval(knots, points, result.DegreeU, knot_remove, times, tolerance);
-        if (t_tmp == 0 || it_v != 0 && t != t_tmp) return {*this, 0};
-        if (it_v == ControlPoints.VCount - 1) result.KnotsU = knots;
-        points_ref.SetV(it_v, points);
-        t = t_tmp;
+        rows.push_back(ControlPoints.GetV(v));
     }
-    return {result, t};
+
+    std::vector<Numeric> out_knots;
+    std::vector<std::vector<Vec4>> out_rows;
+    const int removed = detail::RemoveKnotFromRows(
+        KnotsU.Values(), rows, DegreeU, knot_remove, times, tolerance, out_knots, out_rows);
+
+    if (removed <= 0)
+    {
+        // Independent copy of the source, untouched.
+        return {*this, 0};
+    }
+
+    Surface result{*this};
+    result.KnotsU.Values() = out_knots;
+    result.ControlPoints = Grid<Vec4>(ControlPoints.UCount - removed, ControlPoints.VCount);
+    for (int v = 0; v < result.ControlPoints.VCount; ++v)
+    {
+        for (int u = 0; u < result.ControlPoints.UCount; ++u)
+        {
+            result.ControlPoints.Get(u, v) = out_rows[v][u];
+        }
+    }
+    return {result, removed};
 }
 
 std::tuple<Surface, int> Surface::RemoveKnotV(Numeric knot_remove, int times, Numeric tolerance) const
 {
-    Surface result{*this};
-    auto& points_ref = result.ControlPoints;
-    points_ref = {points_ref.UCount, points_ref.VCount - times};
-    int t = 0;
-    for (int it_u = 0; it_u < ControlPoints.UCount; ++it_u)
+    // Symmetric to RemoveKnotU: each control column along V is a curve on the
+    // shared V knot vector.
+    std::vector<std::vector<Vec4>> rows;
+    rows.reserve(ControlPoints.UCount);
+    for (int u = 0; u < ControlPoints.UCount; ++u)
     {
-        auto knots = result.KnotsV;
-        auto points = this->ControlPoints.GetU(it_u);
-        int t_tmp = KnotRemoval(knots, points, result.DegreeV, knot_remove, times, tolerance);
-        if (t_tmp == 0 || it_u != 0 && t != t_tmp) return {*this, 0};
-        if (it_u == ControlPoints.UCount - 1) result.KnotsV = knots;
-        points_ref.SetU(it_u, points);
-        t = t_tmp;
+        rows.push_back(ControlPoints.GetU(u));
     }
-    return {result, t};
+
+    std::vector<Numeric> out_knots;
+    std::vector<std::vector<Vec4>> out_rows;
+    const int removed = detail::RemoveKnotFromRows(
+        KnotsV.Values(), rows, DegreeV, knot_remove, times, tolerance, out_knots, out_rows);
+
+    if (removed <= 0)
+    {
+        return {*this, 0};
+    }
+
+    Surface result{*this};
+    result.KnotsV.Values() = out_knots;
+    result.ControlPoints = Grid<Vec4>(ControlPoints.UCount, ControlPoints.VCount - removed);
+    for (int u = 0; u < result.ControlPoints.UCount; ++u)
+    {
+        for (int v = 0; v < result.ControlPoints.VCount; ++v)
+        {
+            result.ControlPoints.Get(u, v) = out_rows[u][v];
+        }
+    }
+    return {result, removed};
 }
 
 Surface Surface::ElevateDegreeU(int times) const
