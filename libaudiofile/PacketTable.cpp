@@ -60,6 +60,11 @@ void PacketTable::append(size_t bytesPerPacket)
 	m_bytesPerPacket.push_back(bytesPerPacket);
 }
 
+void PacketTable::resize(size_t numPackets)
+{
+	m_bytesPerPacket.resize(numPackets);
+}
+
 AFfileoffset PacketTable::startOfPacket(size_t packet) const
 {
 	AFfileoffset offset = 0;

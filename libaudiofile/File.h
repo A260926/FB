@@ -62,6 +62,7 @@ public:
 	virtual off_t length() = 0;
 	virtual off_t seek(off_t offset, SeekOrigin origin) = 0;
 	virtual off_t tell() = 0;
+	virtual int truncate(off_t length);
 
 	bool canSeek();
 

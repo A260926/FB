@@ -650,6 +650,14 @@ status CAFFile::writePacketTable()
 		return AF_FAIL;
 	}
 
+	/*
+		The packet table is rewritten in place on every update.  Drop
+		any stale bytes left over from a previously longer directory or
+		tail packet so the packet table always ends at end of file.
+	*/
+	if (m_fh->canSeek() && m_fh->truncate(m_fh->tell()) != 0)
+		return AF_FAIL;
+
 	return AF_SUCCEED;
 }
 

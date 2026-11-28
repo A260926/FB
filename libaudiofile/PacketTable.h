@@ -47,6 +47,7 @@ public:
 	void setRemainderFrames(int32_t remainderFrames);
 
 	void append(size_t bytesPerPacket);
+	void resize(size_t numPackets);
 	size_t bytesPerPacket(size_t packet) const { return m_bytesPerPacket[packet]; }
 	AFfileoffset startOfPacket(size_t packet) const;
 

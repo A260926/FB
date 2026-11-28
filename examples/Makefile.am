@@ -2,6 +2,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/libaudiofile
 
 noinst_PROGRAMS = \
 	adddcoffset \
+	caf_live_record \
 	power \
 	@TEST_BIN@
 
@@ -11,6 +12,9 @@ LIBAUDIOFILE = $(top_builddir)/libaudiofile/libaudiofile.la
 
 alsaplay_SOURCES = alsaplay.cpp
 alsaplay_LDADD = $(LIBAUDIOFILE) -lasound
+
+caf_live_record_SOURCES = caf_live_record.cpp
+caf_live_record_LDADD = $(LIBAUDIOFILE) -lm
 
 irixread_SOURCES = irixread.c sgi.c sgi.h
 irixread_LDADD = $(LIBAUDIOFILE) -laudio

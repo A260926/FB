@@ -78,6 +78,19 @@ private:
 	AFfileoffset m_savedPositionNextFrame;
 	AFframecount m_savedNextFrame;
 
+	/*
+		Directory state describing the audio data committed before the
+		most recent sync.  A sync publishes the buffered partial packet
+		as a temporary tail packet so that readers see a consistent
+		file; the next packet committed afterwards must first roll the
+		packet table and data size back to this state so the temporary
+		tail is not counted twice.
+	*/
+	bool m_hasSyncTail;
+	size_t m_syncBasePacketCount;
+	int64_t m_syncBaseValidFrames;
+	AFfileoffset m_syncBaseDataSize;
+
 	SharedPtr<Buffer> m_codecData;
 	ALACDecoder *m_decoder;
 	ALACEncoder *m_encoder;
@@ -94,6 +107,10 @@ ALAC::ALAC(Mode mode, Track *track, File *fh, bool canSeek, Buffer *codecData) :
 	FileModule(mode, track, fh, canSeek),
 	m_savedPositionNextFrame(-1),
 	m_savedNextFrame(-1),
+	m_hasSyncTail(false),
+	m_syncBasePacketCount(0),
+	m_syncBaseValidFrames(0),
+	m_syncBaseDataSize(0),
 	m_codecData(codecData),
 	m_decoder(NULL),
 	m_encoder(NULL),
@@ -278,6 +295,29 @@ int ALAC::bufferSize() const
 
 void ALAC::runPush()
 {
+	PacketTable *packetTable = m_track->m_packetTable.get();
+
+	/*
+		A sync flushes whatever partial packet is buffered; when the
+		buffer happens to be packet-aligned there is nothing to encode.
+	*/
+	if (m_inChunk->frameCount == 0)
+		return;
+
+	if (m_hasSyncTail)
+	{
+		/*
+			The previous sync published a temporary tail packet in the
+			packet table.  Its bytes are about to be overwritten by the
+			packet now being written, so remove its contribution from
+			the directory before committing new packets.
+		*/
+		packetTable->resize(m_syncBasePacketCount);
+		packetTable->setNumValidFrames(m_syncBaseValidFrames);
+		m_track->data_size = m_syncBaseDataSize;
+		m_hasSyncTail = false;
+	}
+
 	AudioFormatDescription inputFormat;
 	inputFormat.mSampleRate = m_track->f.sampleRate;
 	inputFormat.mFormatID = kALACFormatLinearPCM;
@@ -310,8 +350,6 @@ void ALAC::runPush()
 		return;
 	}
 
-	PacketTable *packetTable = m_track->m_packetTable.get();
-
 	packetTable->append(numBytes);
 
 	packetTable->setNumValidFrames(packetTable->numValidFrames() +
@@ -320,8 +358,29 @@ void ALAC::runPush()
 
 void ALAC::sync1()
 {
+	/*
+		Reposition at the end of the committed audio data: a previous
+		sync or header update may have left the file positioned after
+		the packet table chunk.
+	*/
+	if (canSeek())
+		seek(m_track->fpos_next_frame);
+
 	m_savedPositionNextFrame = m_track->fpos_next_frame;
 	m_savedNextFrame = m_track->nextfframe;
+
+	if (!m_hasSyncTail)
+	{
+		/*
+			Record the directory state without any temporary tail
+			packet.  If a previous sync's tail is still uncommitted,
+			the state recorded then remains the correct base.
+		*/
+		PacketTable *packetTable = m_track->m_packetTable.get();
+		m_syncBasePacketCount = packetTable->numPackets();
+		m_syncBaseValidFrames = packetTable->numValidFrames();
+		m_syncBaseDataSize = m_track->data_size;
+	}
 }
 
 void ALAC::sync2()
@@ -332,6 +391,14 @@ void ALAC::sync2()
 
 	m_track->fpos_next_frame = m_savedPositionNextFrame;
 	m_track->nextfframe = m_savedNextFrame;
+
+	/*
+		If the sync flush appended a temporary tail packet, mark it so
+		that committing the next packet first rolls the directory back
+		to the base state recorded in sync1.
+	*/
+	m_hasSyncTail =
+		m_track->m_packetTable->numPackets() > m_syncBasePacketCount;
 }
 
 bool _af_alac_format_ok (AudioFormat *f)

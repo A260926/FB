@@ -1,0 +1,4 @@
+/Volumes/UserFBWorkspace/questions/FS7546EE25AB99U16789R294034B3C70/attempts/20261128T161452941468Z/repo/.task-build/CMakeFiles/audiofile_task.dir
+/Volumes/UserFBWorkspace/questions/FS7546EE25AB99U16789R294034B3C70/attempts/20261128T161452941468Z/repo/.task-build/CMakeFiles/baseline.dir
+/Volumes/UserFBWorkspace/questions/FS7546EE25AB99U16789R294034B3C70/attempts/20261128T161452941468Z/repo/.task-build/CMakeFiles/edit_cache.dir
+/Volumes/UserFBWorkspace/questions/FS7546EE25AB99U16789R294034B3C70/attempts/20261128T161452941468Z/repo/.task-build/CMakeFiles/rebuild_cache.dir
