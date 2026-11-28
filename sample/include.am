@@ -5,6 +5,7 @@
 # See LICENSE for copying information.
 
 SAMPLES = \
+	sample/buffer-reference-retry			\
 	sample/dns-example				\
 	sample/event-read-fifo			\
 	sample/hello-world				\

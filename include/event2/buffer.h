@@ -387,10 +387,17 @@ ev_ssize_t evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr
   If more bytes are requested than are available in src, the src
   buffer is drained completely.
 
+  This function is failure-atomic with respect to allocation: if any
+  memory that it needs cannot be allocated, it returns -1 and leaves both
+  buffers completely unchanged (contents, lengths, chain references,
+  callback notifications and reference-cleanup responsibility).  The
+  operation may safely be retried.
+
   @param src the evbuffer to be read from
   @param dst the destination evbuffer to store the result into
   @param datlen the maximum numbers of bytes to transfer
-  @return the number of bytes read
+  @return the number of bytes read, or -1 on allocation failure (or if the
+    buffers are frozen or otherwise reject the operation)
  */
 EVENT2_EXPORT_SYMBOL
 int evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
@@ -461,6 +468,13 @@ int evbuffer_add_buffer(struct evbuffer *outbuf, struct evbuffer *inbuf);
 
   Note that buffers already containing buffer references can't be added
   to other buffers.
+
+  This function is failure-atomic with respect to allocation: if the
+  chain descriptors needed to share the source cannot all be allocated,
+  it returns -1 without modifying either buffer.  No bytes are copied or
+  moved, no chain is made immutable, no callback runs, and the source can
+  still be used (and shared again) exactly as before.  The operation may
+  safely be retried.
 
   @param outbuf the output buffer
   @param inbuf the input buffer

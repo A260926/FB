@@ -1012,6 +1012,7 @@ macro(add_sample_prog ssl name)
 endmacro()
 if (NOT EVENT__DISABLE_SAMPLES)
     set(SAMPLES
+        buffer-reference-retry
         event-read-fifo
         hello-world
         signal-test

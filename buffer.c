@@ -904,44 +904,52 @@ APPEND_CHAIN(struct evbuffer *dst, struct evbuffer *src)
 	dst->total_len += src->total_len;
 }
 
-static inline void
-APPEND_CHAIN_MULTICAST(struct evbuffer *dst, struct evbuffer *src)
+/* Prepare a chain that will share the storage of 'parent'.  The returned
+ * chain is not linked anywhere and owns no references: the caller must either
+ * commit it (see below) or free it with evbuffer_chain_free().  Requires the
+ * source buffer to be locked.
+ */
+static struct evbuffer_chain *
+evbuffer_multicast_chain_prepare(struct evbuffer_chain *parent)
 {
 	struct evbuffer_chain *tmp;
-	struct evbuffer_chain *chain = src->first;
 	struct evbuffer_multicast_parent *extra;
 
-	ASSERT_EVBUFFER_LOCKED(dst);
-	ASSERT_EVBUFFER_LOCKED(src);
+	tmp = evbuffer_chain_new(sizeof(struct evbuffer_multicast_parent));
+	if (!tmp)
+		return NULL;
+	extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, tmp);
+	/* Remember the source chain for the commit phase.  source/refcounts
+	 * are only set up once every chain has been prepared successfully. */
+	extra->source = NULL;
+	extra->parent = parent;
+	tmp->buffer_len = parent->buffer_len;
+	tmp->misalign = parent->misalign;
+	tmp->off = parent->off;
+	tmp->buffer = parent->buffer;
+	return tmp;
+}
 
-	for (; chain; chain = chain->next) {
-		if (!chain->off || chain->flags & EVBUFFER_DANGLING) {
-			/* skip empty chains */
-			continue;
-		}
+/* Turn a prepared multicast chain into a live sharing chain and append it to
+ * 'dst'.  This cannot fail.  Requires both buffers to be locked. */
+static void
+evbuffer_multicast_chain_commit(struct evbuffer *dst, struct evbuffer *src,
+    struct evbuffer_chain *tmp)
+{
+	struct evbuffer_multicast_parent *extra =
+	    EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, tmp);
+	struct evbuffer_chain *parent = extra->parent;
 
-		tmp = evbuffer_chain_new(sizeof(struct evbuffer_multicast_parent));
-		if (!tmp) {
-			event_warn("%s: out of memory", __func__);
-			return;
-		}
-		extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, tmp);
-		/* reference evbuffer containing source chain so it
-		 * doesn't get released while the chain is still
-		 * being referenced to */
-		evbuffer_incref_(src);
-		extra->source = src;
-		/* reference source chain which now becomes immutable */
-		evbuffer_chain_incref(chain);
-		extra->parent = chain;
-		chain->flags |= EVBUFFER_IMMUTABLE;
-		tmp->buffer_len = chain->buffer_len;
-		tmp->misalign = chain->misalign;
-		tmp->off = chain->off;
-		tmp->flags |= EVBUFFER_MULTICAST|EVBUFFER_IMMUTABLE;
-		tmp->buffer = chain->buffer;
-		evbuffer_chain_insert(dst, tmp);
-	}
+	/* reference evbuffer containing source chain so it
+	 * doesn't get released while the chain is still
+	 * being referenced to */
+	evbuffer_incref_(src);
+	extra->source = src;
+	/* reference source chain which now becomes immutable */
+	evbuffer_chain_incref(parent);
+	parent->flags |= EVBUFFER_IMMUTABLE;
+	tmp->flags |= EVBUFFER_MULTICAST|EVBUFFER_IMMUTABLE;
+	evbuffer_chain_insert(dst, tmp);
 }
 
 static void
@@ -1013,6 +1021,8 @@ evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf)
 {
 	size_t in_total_len, out_total_len;
 	struct evbuffer_chain *chain;
+	struct evbuffer_chain *prepared = NULL, **prepared_tail = &prepared;
+	struct evbuffer_chain *tmp;
 	int result = 0;
 
 	EVBUFFER_LOCK2(inbuf, outbuf);
@@ -1036,12 +1046,43 @@ evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf)
 		}
 	}
 
+	/* Prepare every multicast chain before touching either buffer.  If any
+	 * allocation fails, nothing has been committed: the source keeps its
+	 * chains, no IMMUTABLE flag or refcount was changed, no callback has
+	 * fired, and the destination is exactly as it was. */
+	for (chain = inbuf->first; chain; chain = chain->next) {
+		if (!chain->off || chain->flags & EVBUFFER_DANGLING)
+			continue;
+		tmp = evbuffer_multicast_chain_prepare(chain);
+		if (!tmp) {
+			event_warn("%s: out of memory", __func__);
+			result = -1;
+			break;
+		}
+		*prepared_tail = tmp;
+		prepared_tail = &tmp->next;
+	}
+
+	if (result != 0) {
+		/* Release the prepared, still uncommitted chains.  They hold no
+		 * references and are not linked into any buffer. */
+		evbuffer_free_all_chains(prepared);
+		goto done;
+	}
+
+	/* Commit phase: no allocation and no failure possible from here on. */
 	if (out_total_len == 0) {
 		/* There might be an empty chain at the start of outbuf; free
 		 * it. */
 		evbuffer_free_all_chains(outbuf->first);
+		ZERO_CHAIN(outbuf);
 	}
-	APPEND_CHAIN_MULTICAST(outbuf, inbuf);
+	for (tmp = prepared; tmp; tmp = prepared) {
+		prepared = tmp->next;
+		/* 'next' was only used to keep the uncommitted list together. */
+		tmp->next = NULL;
+		evbuffer_multicast_chain_commit(outbuf, inbuf, tmp);
+	}
 
 	outbuf->n_add_for_cb += in_total_len;
 	evbuffer_invoke_callbacks_(outbuf);
@@ -1263,8 +1304,9 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 	/*XXX We should have an option to force this to be zero-copy.*/
 
 	/*XXX can fail badly on sendfile case. */
-	struct evbuffer_chain *chain, *previous;
-	size_t nread = 0;
+	struct evbuffer_chain *chain, *previous, *tail = NULL;
+	size_t nread = 0, tail_len = 0;
+	int reset_src_last_with_data = 0;
 	int result;
 
 	EVBUFFER_LOCK2(src, dst);
@@ -1284,12 +1326,20 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 	/* short-cut if there is no more data buffered */
 	if (datlen >= src->total_len) {
 		datlen = src->total_len;
-		evbuffer_add_buffer(dst, src);
+		/* evbuffer_add_buffer() allocates only while preserving
+		 * read-pinned chains, and leaves both buffers untouched if
+		 * that allocation fails. */
+		if (evbuffer_add_buffer(dst, src) < 0) {
+			result = -1;
+			goto done;
+		}
 		result = (int)datlen; /*XXXX should return ev_ssize_t*/
 		goto done;
 	}
 
-	/* removes chains if possible */
+	/* Plan phase: locate the boundary and prepare the copy of the fragment
+	 * that crosses into the next chain.  Nothing in either buffer is
+	 * modified yet, so any allocation failure can simply drop 'tail'. */
 	while (chain->off <= datlen) {
 		/* We can't remove the last with data from src unless we
 		 * remove all chains, in which case we would have done the if
@@ -1299,10 +1349,23 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 		datlen -= chain->off;
 		previous = chain;
 		if (src->last_with_datap == &chain->next)
-			src->last_with_datap = &src->first;
+			reset_src_last_with_data = 1;
 		chain = chain->next;
 	}
 
+	tail_len = datlen;
+	if (tail_len) {
+		tail = evbuffer_chain_new(tail_len);
+		if (!tail) {
+			event_warn("%s: out of memory", __func__);
+			result = -1;
+			goto done;
+		}
+		memcpy(tail->buffer, chain->buffer + chain->misalign, tail_len);
+		tail->off = tail_len;
+	}
+
+	/* Commit phase: neither of the remaining steps allocate or fail. */
 	if (chain != src->first) {
 		/* we can remove the chain */
 		struct evbuffer_chain **chp;
@@ -1315,6 +1378,8 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 		}
 		dst->last = previous;
 		previous->next = NULL;
+		if (reset_src_last_with_data)
+			src->last_with_datap = &src->first;
 		src->first = chain;
 		advance_last_with_data(dst);
 
@@ -1322,16 +1387,20 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 		dst->n_add_for_cb += nread;
 	}
 
+	if (tail) {
+		/* evbuffer_chain_insert() also accounts tail_len in
+		 * dst->total_len; n_add_for_cb is ours to increment. */
+		evbuffer_chain_insert(dst, tail);
+		dst->n_add_for_cb += tail_len;
+		tail = NULL;
+	}
+
 	/* we know that there is more data in the src buffer than
 	 * we want to read, so we manually drain the chain */
-	evbuffer_add(dst, chain->buffer + chain->misalign, datlen);
-	chain->misalign += datlen;
-	chain->off -= datlen;
-	nread += datlen;
+	chain->misalign += tail_len;
+	chain->off -= tail_len;
+	nread += tail_len;
 
-	/* You might think we would want to increment dst->n_add_for_cb
-	 * here too.  But evbuffer_add above already took care of that.
-	 */
 	src->total_len -= nread;
 	src->n_del_for_cb += nread;
 
@@ -1342,6 +1411,8 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 	result = (int)nread;/*XXXX should change return type */
 
 done:
+	if (tail)
+		evbuffer_chain_free(tail);
 	EVBUFFER_UNLOCK2(src, dst);
 	return result;
 }
@@ -1396,8 +1467,12 @@ evbuffer_pullup(struct evbuffer *buf, ev_ssize_t size)
 		tmp->off = size;
 		size -= old_off;
 		chain = chain->next;
-	} else if (chain->buffer_len - chain->misalign >= (size_t)size) {
-		/* already have enough space in the first chain */
+	} else if (!(chain->flags & EVBUFFER_IMMUTABLE) &&
+	    chain->buffer_len - chain->misalign >= (size_t)size) {
+		/* already have enough space in the first chain.  An immutable
+		 * chain (a reference or a multicast child) shares its storage
+		 * with somebody else, so it must never be used as the copy
+		 * target even when it looks big enough. */
 		size_t old_off = chain->off;
 		buffer = chain->buffer + chain->misalign + chain->off;
 		tmp = chain;

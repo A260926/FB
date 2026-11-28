@@ -319,6 +319,60 @@
   There's a new evbuffer_set_flags()/evbuffer_clear_flags() that you can use to
   set EVBUFFER_FLAG_DRAINS_TO_FD.
 
+1.5.1. Allocation-failure atomicity of evbuffer operations
+
+  evbuffer_add_buffer_reference() and evbuffer_remove_buffer() are now
+  failure-atomic with respect to memory allocation.  If they cannot
+  allocate all of the chain descriptors (and, for evbuffer_remove_buffer(),
+  the storage for the fragment that crosses a chain boundary) that they
+  need, they return -1 and leave both involved buffers exactly as they
+  were before the call.  In particular:
+
+    - no bytes are moved, copied, added or deleted in either buffer;
+    - the source and destination lengths are unchanged, and the visible
+      contents are unchanged;
+    - no existing chain is marked immutable, no multicast parent/source
+      reference is created, and no chain or evbuffer reference count is
+      changed;
+    - any chain descriptors that were prepared are freed;
+    - no change callback runs for this call, evbuffer_defer_callbacks()
+      pending notifications are neither added nor removed, and
+      n_added/n_deleted stay at whatever they were before the call; and
+    - the caller's ownership of every evbuffer_add_reference() memory
+      block is unchanged: nothing is treated as drained or released, so
+      the cleanup callbacks will still run exactly once, when the blocks
+      really become unreachable.
+
+  A caller that receives -1 therefore has nothing to roll back and may
+  simply retry the operation later, once allocation succeeds.  On success
+  the documented behaviour is unchanged:
+  evbuffer_add_buffer_reference() adds a non-destructive snapshot of the
+  source, and evbuffer_remove_buffer() moves min(requested, source length)
+  bytes and returns the number of bytes actually moved (still an int, with
+  the amount limited to INT_MAX).
+
+  The source compatibility of both functions is unchanged: they keep their
+  signatures and return types, and the same argument checks (self
+  references, zero-length requests, frozen front/end buffers, and chain
+  types that cannot be referenced) still reject the operation with -1.
+  Code that handled allocation failure by examining the partially-changed
+  buffers can now rely on the buffers being untouched instead; code that
+  never saw an allocation failure is unaffected.
+
+  The complete transfer of whole chains still uses the chain structure and
+  does not degrade to a byte-wise copy.  Sharing still points at the
+  original memory rather than staging a contiguous copy of the source.
+  Only the fragment that crosses into the next chain is copied, and only
+  into storage that is prepared before anything is committed.  Note that
+  evbuffer_pullup() will no longer use an immutable chain (such as a
+  multicast child or a reference chain) as the destination of its copy,
+  which previously could overwrite storage still shared with another
+  buffer.
+
+  See sample/buffer-reference-retry.c for a program that retries a
+  failed evbuffer_add_buffer_reference() and never has to undo partial
+  state.
+
 1.6. New functions and features: bufferevents
 
   You can now use the bufferevent_getcb() function to find out a
