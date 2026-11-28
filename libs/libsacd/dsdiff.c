@@ -45,6 +45,7 @@
 #include "dsdiff.h"
 #include "scarletbook.h"
 #include "version.h"
+#include "dsd_window.h"
 
 #define DSDFIFF_BUFFER_SIZE    (1024 * 128)
 
@@ -62,7 +63,11 @@ typedef struct
     size_t              frame_indexes_allocated;
 
     int                 edit_master;
-} 
+
+    int                 window_enabled;
+    dsd_window_t        window;
+    size_t              padding_bytes; // odd-length alignment byte, not part of the DSD chunk length
+}
 dsdiff_handle_t;
 
 static char *get_mtoc_title_text(scarletbook_handle_t *handle)
@@ -251,7 +256,11 @@ static int calculate_header_and_footer(scarletbook_output_format_t *ft)
         dsd_sound_data_chunk_t * dsd_sound_data_chunk;
         dsd_sound_data_chunk                  = (dsd_sound_data_chunk_t *) write_ptr;
         dsd_sound_data_chunk->chunk_id        = DSD_MARKER;
-        dsd_sound_data_chunk->chunk_data_size = CALC_CHUNK_SIZE(handle->audio_data_size);
+        if (handle->window_enabled)
+            // The DSD chunk length counts audio only; the odd-length pad is physical, not in the field
+            dsd_sound_data_chunk->chunk_data_size = hton64(handle->audio_data_size);
+        else
+            dsd_sound_data_chunk->chunk_data_size = CALC_CHUNK_SIZE(handle->audio_data_size);
 
         write_ptr += CHUNK_HEADER_SIZE;
     }
@@ -366,13 +375,27 @@ static int calculate_header_and_footer(scarletbook_output_format_t *ft)
         else
         {
             marker_chunk_t *marker_chunk = (marker_chunk_t *) em_ptr;
-            area_tracklist_time_t *area_tracklist_time_duration = &sb_handle->area[ft->area].area_tracklist_time->duration[ft->track];
             marker_chunk->chunk_id = MARK_MARKER;
             marker_chunk->chunk_data_size = CALC_CHUNK_SIZE(EDITED_MASTER_MARKER_CHUNK_SIZE - CHUNK_HEADER_SIZE);
-            marker_chunk->hours = hton16(area_tracklist_time_duration->minutes / 60);
-            marker_chunk->minutes = area_tracklist_time_duration->minutes % 60;
-            marker_chunk->seconds = area_tracklist_time_duration->seconds;
-            marker_chunk->samples = hton32(area_tracklist_time_duration->frames * SAMPLES_PER_FRAME * 64);
+            if (handle->window_enabled)
+            {
+                // The index entry marks the end of the output, so it is timed from the
+                // number of DSD bit samples actually written, not the source TOC duration.
+                uint64_t out_samples = ft->sample_window_end - ft->sample_window_begin;
+                uint64_t seconds = out_samples / SACD_SAMPLING_FREQUENCY;
+                marker_chunk->hours = hton16(seconds / 3600);
+                marker_chunk->minutes = (seconds % 3600) / 60;
+                marker_chunk->seconds = seconds % 60;
+                marker_chunk->samples = hton32(out_samples % SACD_SAMPLING_FREQUENCY);
+            }
+            else
+            {
+                area_tracklist_time_t *area_tracklist_time_duration = &sb_handle->area[ft->area].area_tracklist_time->duration[ft->track];
+                marker_chunk->hours = hton16(area_tracklist_time_duration->minutes / 60);
+                marker_chunk->minutes = area_tracklist_time_duration->minutes % 60;
+                marker_chunk->seconds = area_tracklist_time_duration->seconds;
+                marker_chunk->samples = hton32(area_tracklist_time_duration->frames * SAMPLES_PER_FRAME * 64);
+            }
             marker_chunk->offset = 0;
             marker_chunk->mark_type = hton16(MARK_MARKER_TYPE_INDEX_ENTRY);
             marker_chunk->mark_channel = hton16(COMT_TYPE_CHANNEL_ALL);
@@ -560,7 +583,10 @@ static int calculate_header_and_footer(scarletbook_output_format_t *ft)
     }
 
     handle->header_size = CEIL_ODD_NUMBER(write_ptr - handle->header);
-    form_dsd_chunk->chunk_data_size = CALC_CHUNK_SIZE(handle->header_size + handle->footer_size + handle->audio_data_size - CHUNK_HEADER_SIZE);
+    // The trailing alignment pad exists physically in the file but never in the DSD chunk length.
+    form_dsd_chunk->chunk_data_size = CALC_CHUNK_SIZE(handle->header_size + handle->footer_size
+                                                      + handle->audio_data_size + handle->padding_bytes
+                                                      - CHUNK_HEADER_SIZE);
 
     return 0;
 }
@@ -570,6 +596,13 @@ static int dsdiff_create_edit_master(scarletbook_output_format_t *ft)
     int ret;
     dsdiff_handle_t *handle = (dsdiff_handle_t *) ft->priv;
     handle->edit_master = 1;
+    handle->window_enabled = ft->sample_window_enabled ? 1 : 0;
+
+    // Validate the sample-window configuration before the file header is written.
+    if (handle->window_enabled
+        && dsd_window_prepare(ft, DSD_WINDOW_CONTAINER_DSDIFF, &handle->window) < 0)
+        return -1;
+
     ret = calculate_header_and_footer(ft);
     size_t nrw=fwrite(handle->header, 1, handle->header_size, ft->fd);
 	if(nrw !=  handle->header_size)
@@ -582,9 +615,17 @@ static int dsdiff_create_edit_master(scarletbook_output_format_t *ft)
 
 static int dsdiff_create(scarletbook_output_format_t *ft)
 {
-    int ret = calculate_header_and_footer(ft);
+    int ret;
     dsdiff_handle_t  *handle = (dsdiff_handle_t *) ft->priv;
-    size_t nrw=fwrite(handle->header, 1, handle->header_size, ft->fd); 
+    handle->window_enabled = ft->sample_window_enabled ? 1 : 0;
+
+    // Validate the sample-window configuration before the file header is written.
+    if (handle->window_enabled
+        && dsd_window_prepare(ft, DSD_WINDOW_CONTAINER_DSDIFF, &handle->window) < 0)
+        return -1;
+
+    ret = calculate_header_and_footer(ft);
+    size_t nrw=fwrite(handle->header, 1, handle->header_size, ft->fd);
 	if(nrw !=  handle->header_size)
 	{ 		        
 		LOG(lm_main, LOG_ERROR, ("dsdiff_create(0: error writing in file %s", ft->filename));
@@ -593,25 +634,68 @@ static int dsdiff_create(scarletbook_output_format_t *ft)
     return ret;
 }
 
+// Sink for sample-window output: the selected stream stays MSB-first and
+// interleaved per clustered frame, so produced bytes are written directly in
+// channel order. DSDIFF windows are byte-aligned by validation.
+static int dsdiff_window_sink(scarletbook_output_format_t *ft, int channel,
+                              uint8_t byte_msb, int valid_bits)
+{
+    dsdiff_handle_t *handle = (dsdiff_handle_t *) ft->priv;
+    size_t nrw;
+    (void) channel;
+    (void) valid_bits;
+
+    nrw = fwrite(&byte_msb, 1, 1, ft->fd);
+    if (nrw != 1)
+    {
+        LOG(lm_main, LOG_ERROR, ("dsdiff_window_sink(): error writing in file %s", ft->filename));
+        return -1;
+    }
+    handle->audio_data_size += 1; // audio bytes only; the odd-length pad is counted separately
+    return 0;
+}
+
 static int dsdiff_close(scarletbook_output_format_t *ft)
 {
     dsdiff_handle_t *handle = (dsdiff_handle_t *) ft->priv;
 
     if (!handle)
         return 0;
-    
+
+    if (handle->window_enabled)
+    {
+        // Flush any pending bytes and verify the complete window was received.
+        if (dsd_window_finish(&handle->window, ft, dsdiff_window_sink) < 0)
+        {
+            if (lm_main)
+                LOG(lm_main, LOG_ERROR, ("dsdiff_close(): incomplete sample window %s", ft->filename));
+            if (handle->frame_indexes)
+                free(handle->frame_indexes);
+            if (handle->header)
+                free(handle->header);
+            if (handle->footer)
+                free(handle->footer);
+            handle->header = NULL;
+            handle->footer  = NULL;
+            return -1;
+        }
+    }
+
     if (handle->audio_data_size % 2)
     {
         uint8_t dummy = 0;
 		size_t nrw;
         nrw=fwrite(&dummy, 1, 1, ft->fd);
 		if(nrw != 1)
-		{ 		        
+		{
 			LOG(lm_main, LOG_ERROR, ("dsdiff_close(0: error writing in file %s", ft->filename));
-			return -1;               				
+			return -1;
 		}
-			
-        handle->audio_data_size += 1;
+
+        if (handle->window_enabled)
+            handle->padding_bytes += 1; // keep the DSD chunk length audio-only
+        else
+            handle->audio_data_size += 1;
     }
 
     // re-calculate the header & footer
@@ -647,6 +731,18 @@ static int dsdiff_close(scarletbook_output_format_t *ft)
 static int dsdiff_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, size_t len)
 {
     dsdiff_handle_t *handle = (dsdiff_handle_t *) ft->priv;
+
+    if (handle->window_enabled)
+    {
+        uint64_t prev_audio_data_size = handle->audio_data_size;
+
+        // Streaming bit-window path; the produced bytes remain MSB-first interleaved.
+        if (dsd_window_feed(&handle->window, ft, buf, len, dsdiff_window_sink) < 0)
+            return -1;
+
+        // Zero-length and fully-ignored calls still succeed with zero physical bytes out.
+        return (int) (handle->audio_data_size - prev_audio_data_size);
+    }
 
     handle->frame_count++;
 

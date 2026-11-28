@@ -40,6 +40,7 @@
 #include "version.h"
 #include "scarletbook.h"
 #include "dsf.h"
+#include "dsd_window.h"
 
 #define DSF_HEADER_FOOTER_SIZE 2048
 
@@ -57,6 +58,9 @@ typedef struct
 
     uint8_t buffer[MAX_CHANNEL_COUNT][SACD_BLOCK_SIZE_PER_CHANNEL];
     uint8_t *buffer_ptr[MAX_CHANNEL_COUNT];
+
+    int         window_enabled;
+    dsd_window_t window;
 
 } dsf_handle_t;
 
@@ -135,7 +139,11 @@ static int dsf_create_header(scarletbook_output_format_t *ft)
         fmt_chunk->channel_count            = htole32(area_toc->channel_count);
         fmt_chunk->sample_frequency         = htole32(SACD_SAMPLING_FREQUENCY);
         fmt_chunk->bits_per_sample          = htole32(SACD_BITS_PER_SAMPLE);
-        fmt_chunk->sample_count             = htole64(handle->sample_count / area_toc->channel_count * 8);
+        if (handle->window_enabled)
+            // sample_count counts the selected DSD bit samples per channel directly
+            fmt_chunk->sample_count         = htole64(handle->sample_count / area_toc->channel_count);
+        else
+            fmt_chunk->sample_count         = htole64(handle->sample_count / area_toc->channel_count * 8);
         fmt_chunk->block_size_per_channel   = htole32(SACD_BLOCK_SIZE_PER_CHANNEL);
         fmt_chunk->reserved                 = 0;
 
@@ -177,6 +185,13 @@ static int dsf_create(scarletbook_output_format_t *ft)
 {
     dsf_handle_t *handle = (dsf_handle_t *)ft->priv;
 
+    handle->channel_count  = ft->sb_handle->area[ft->area].area_toc->channel_count;
+    handle->window_enabled = ft->sample_window_enabled ? 1 : 0;
+
+    // Validate the sample-window configuration before anything is written to the file.
+    if (handle->window_enabled && dsd_window_prepare(ft, DSD_WINDOW_CONTAINER_DSF, &handle->window) < 0)
+        return -1;
+
     int rez = dsf_create_header(ft);
 
     ////// BUG - buffer_ptr[] where not initialized at all in original code!!!!!  Now initialized here!
@@ -211,6 +226,37 @@ static int dsf_create(scarletbook_output_format_t *ft)
     return rez;
 }
 
+// Sink for sample-window output: one packed MSB-first byte (or the trailing
+// partial byte) for one channel. DSF stores DSD LSB-first in 4096-byte blocks,
+// so the byte is bit-reversed into the per-channel block buffer.
+static int dsf_window_sink(scarletbook_output_format_t *ft, int channel,
+                           uint8_t byte_msb, int valid_bits)
+{
+    dsf_handle_t *handle = (dsf_handle_t *)ft->priv;
+    uint8_t *row = &handle->buffer[channel][0];
+    uint8_t *ptr = handle->buffer_ptr[channel];
+    size_t bytes_w;
+
+    *ptr++ = bit_reverse_table[byte_msb];
+    handle->sample_count += valid_bits; // selected DSD bit samples, including the partial last byte
+
+    if (ptr == row + SACD_BLOCK_SIZE_PER_CHANNEL)
+    {
+        bytes_w = fwrite(row, 1, SACD_BLOCK_SIZE_PER_CHANNEL, ft->fd);
+        if (bytes_w != SACD_BLOCK_SIZE_PER_CHANNEL)
+        {
+            LOG(lm_main, LOG_ERROR, ("dsf_window_sink(): error writing block in file: %s", ft->filename));
+            return -1;
+        }
+        handle->audio_data_size += SACD_BLOCK_SIZE_PER_CHANNEL;
+        memset(row, 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // unused high bits and block remainder stay zero
+        ptr = row;
+    }
+
+    handle->buffer_ptr[channel] = ptr;
+    return 0;
+}
+
 static int dsf_close(scarletbook_output_format_t *ft)
 {
     dsf_handle_t *handle = (dsf_handle_t *)ft->priv;
@@ -218,6 +264,24 @@ static int dsf_close(scarletbook_output_format_t *ft)
     int i;
 	size_t bytes_w;
 	int result=0;
+
+    if (handle->window_enabled)
+    {
+        // Flush the trailing partial byte (if any) into the per-channel buffers and
+        // make sure the complete window was actually received.
+        if (dsd_window_finish(&handle->window, ft, dsf_window_sink) < 0)
+        {
+            if (lm_main)
+                LOG(lm_main, LOG_ERROR, ("dsf_close(): incomplete sample window %s", ft->filename));
+            if (handle->header)
+                free(handle->header);
+            if (handle->footer)
+                free(handle->footer);
+            handle->header = NULL;
+            handle->footer  = NULL;
+            return -1;
+        }
+    }
 
     // Save the remaining samples in the buffer to be attached to the beginning of the next track.  // This is mindset idea with nopad option !! Thank you!
     // This is needed for padding-less DSF generation.  This is for players that cannot handle zero-padding properly.
@@ -272,12 +336,9 @@ static int dsf_close(scarletbook_output_format_t *ft)
                     break;
                 }
 
-                handle->sample_count += handle->buffer_ptr[i] - handle->buffer[i];
+                if (!handle->window_enabled)
+                    handle->sample_count += handle->buffer_ptr[i] - handle->buffer[i];
                 handle->audio_data_size += SACD_BLOCK_SIZE_PER_CHANNEL;
-
-                //DEBUG
-                //int size_rezult=(int)(handle->buffer_ptr[i] - handle->buffer[i]);
-                //LOG(lm_main, LOG_NOTICE, ("Dsf_close: nopad=0 or last track; prev_track_no=%d, track=%d, size_buffer=%d, full=%d[%%]", prev_track_no, ft->track, size_rezult,(int)size_rezult*100/SACD_BLOCK_SIZE_PER_CHANNEL));
 
                 // empty the main frame buffers
                 memset(handle->buffer[i], 0x00, SACD_BLOCK_SIZE_PER_CHANNEL); // Mandatory is 0x00. But tried with 0x99 (10011001) for reducing pop noise ( or 0x69)
@@ -312,11 +373,19 @@ static int dsf_close(scarletbook_output_format_t *ft)
 static int dsf_write_frame(scarletbook_output_format_t *ft, const uint8_t *buf, size_t len)
 {
     dsf_handle_t *handle = (dsf_handle_t *) ft->priv;
+    uint64_t prev_audio_data_size = handle->audio_data_size;
     const uint8_t *buf_end_ptr = buf + len;
     const uint8_t *buf_ptr = buf;
-    uint64_t prev_audio_data_size = handle->audio_data_size;
     int i;
     uint8_t *buffer_row_start_ptr;
+
+    if (handle->window_enabled)
+    {
+        // Streaming bit-window path; physical bytes still go out in 4096-byte blocks.
+        if (dsd_window_feed(&handle->window, ft, buf, len, dsf_window_sink) < 0)
+            return -1;
+        return (int) (handle->audio_data_size - prev_audio_data_size);
+    }
 
     while(buf_ptr < buf_end_ptr)
     {

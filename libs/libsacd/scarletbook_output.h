@@ -88,7 +88,14 @@ struct scarletbook_output_format_t
     fwprintf_callback_t             cb_fwprintf;
 
     struct list_head                siblings;
-}; 
+
+    // Optional per-channel DSD sample window, half-open [sample_window_begin, sample_window_end).
+    // When sample_window_enabled is non-zero only that window of the MSB-first interleaved DSD
+    // stream is written; the bounds count DSD bit samples per channel.
+    int                             sample_window_enabled;
+    uint64_t                        sample_window_begin;
+    uint64_t                        sample_window_end;
+};
 
 typedef void (*stats_progress_callback_t)(uint32_t stats_total_sectors, uint32_t stats_total_sectors_processed,
                                           uint32_t stats_current_file_total_sectors, uint32_t stats_current_file_sectors_processed);
