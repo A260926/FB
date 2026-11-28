@@ -145,6 +145,7 @@ void shine_iteration_loop(shine_global_config *config) {
       cod_info->table_select[0] = 0;
       cod_info->table_select[1] = 0;
       cod_info->table_select[2] = 0;
+      cod_info->table_select[3] = 0;
       cod_info->region0_count = 0;
       cod_info->region1_count = 0;
       cod_info->part2_length = 0;
@@ -152,10 +153,29 @@ void shine_iteration_loop(shine_global_config *config) {
       cod_info->scalefac_scale = 0;
       cod_info->count1table_select = 0;
 
+      /* Window switching state for this granule. */
+      cod_info->block_type = config->window.block_type[ch][gr];
+      cod_info->mixed_block_flag = 0;
+      for (i = 0; i < 3; i++)
+        cod_info->subblock_gain[i] = 0;
+
+      /* scfsi is never reused in a window-switching frame: short blocks may
+       * not share scalefactors at all (ISO 2.4.2.7), and for long transition
+       * blocks we simply transmit every granule's scalefactors. */
+      if (config->mpeg.version == MPEG_I && config->window.any_short) {
+        int b;
+        for (b = 0; b < 4; b++)
+          config->side_info.scfsi[ch][b] = 0;
+      }
+
       /* all spectral values zero ? */
-      if (config->l3loop.xrmax)
+      if (config->l3loop.xrmax) {
         cod_info->part2_3_length =
             shine_outer_loop(max_bits, &l3_xmin, ix, gr, ch, config);
+      } else {
+        cod_info->part2_length = part2_length(gr, ch, config);
+        cod_info->part2_3_length = cod_info->part2_length;
+      }
 
       shine_ResvAdjust(cod_info, config);
       cod_info->global_gain = cod_info->quantizerStepSize + 210;
@@ -280,10 +300,17 @@ int part2_length(int gr, int ch, shine_global_config *config) {
 
   bits = 0;
 
-  {
-    slen1 = shine_slen1_tab[gi->scalefac_compress];
-    slen2 = shine_slen2_tab[gi->scalefac_compress];
+  slen1 = shine_slen1_tab[gi->scalefac_compress];
+  slen2 = shine_slen2_tab[gi->scalefac_compress];
 
+  if (gi->block_type == 2) {
+    /* Short blocks carry three scalefactors per band and never use scfsi.
+     * 6 bands use slen1 and 7 bands use slen2, per window. */
+    bits += 3 * (6 * slen1 + 7 * slen2);
+    return bits;
+  }
+
+  {
     if (!gr || !(config->side_info.scfsi[ch][0]))
       bits += (6 * slen1);
 
@@ -530,6 +557,28 @@ void subdivide(gr_info *cod_info, shine_global_config *config) {
   if (!cod_info->big_values) { /* no big_values region */
     cod_info->region0_count = 0;
     cod_info->region1_count = 0;
+  } else if (cod_info->block_type != 0) {
+    /* Window-switching mode (start, short or stop): the side info carries no
+     * region counts. Per ISO 2.4.3.4 the decoder implies region0_count = 7
+     * and region1_count = 36, i.e. a single boundary at band 8; the second
+     * table then covers everything up to big_values. Short blocks use the
+     * 192-line short grid, the long transition windows the long grid. */
+    const int *sb = (cod_info->block_type == 2)
+                        ? &shine_scale_fact_band_index_short
+                               [config->mpeg.samplerate_index][0]
+                        : &shine_scale_fact_band_index
+                               [config->mpeg.samplerate_index][0];
+    int mult = (cod_info->block_type == 2) ? 3 : 1;
+    int bigvalues_region = 2 * cod_info->big_values;
+    int boundary = mult * sb[8];
+    int r0 = 7;
+    if (boundary > bigvalues_region) boundary = bigvalues_region;
+
+    cod_info->region0_count = r0;
+    cod_info->region1_count = 36;
+    cod_info->address1 = boundary;
+    cod_info->address2 = bigvalues_region;
+    cod_info->address3 = bigvalues_region;
   } else {
     const int *scalefac_band_long =
         &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
@@ -573,18 +622,25 @@ void bigv_tab_select(int ix[GRANULE_SIZE], gr_info *cod_info) {
   cod_info->table_select[0] = 0;
   cod_info->table_select[1] = 0;
   cod_info->table_select[2] = 0;
+  cod_info->table_select[3] = 0;
 
-  {
-    if (cod_info->address1 > 0)
-      cod_info->table_select[0] = new_choose_table(ix, 0, cod_info->address1);
+  if (cod_info->address1 > 0)
+    cod_info->table_select[0] = new_choose_table(ix, 0, cod_info->address1);
 
-    if (cod_info->address2 > cod_info->address1)
-      cod_info->table_select[1] =
-          new_choose_table(ix, cod_info->address1, cod_info->address2);
+  if (cod_info->address2 > cod_info->address1)
+    cod_info->table_select[1] =
+        new_choose_table(ix, cod_info->address1, cod_info->address2);
 
-    if (cod_info->big_values << 1 > cod_info->address2)
-      cod_info->table_select[2] =
-          new_choose_table(ix, cod_info->address2, cod_info->big_values << 1);
+  if (cod_info->big_values << 1 > cod_info->address2)
+    cod_info->table_select[2] =
+        new_choose_table(ix, cod_info->address2, cod_info->big_values << 1);
+
+  if (cod_info->block_type != 0) {
+    /* In window-switching mode the side info only carries two tables: one
+     * for region0 and one shared by regions 1 and 2 (both long and short
+     * blocks). Mirror it so that the bit count matches what is written. */
+    cod_info->table_select[2] = cod_info->table_select[1];
+    cod_info->table_select[3] = cod_info->table_select[2];
   }
 }
 

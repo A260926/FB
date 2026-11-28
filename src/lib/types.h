@@ -59,6 +59,15 @@
 #define MAX_GRANULES 2
 #endif
 
+#ifdef SHINE_TEST_HOOKS
+/* Read-only observation points used by the test program only. */
+extern int32_t shine_test_mdct_in[MAX_CHANNELS][MAX_GRANULES][32][36];
+extern int32_t shine_test_mdct_pre[MAX_CHANNELS][MAX_GRANULES][32][18];
+extern int32_t shine_test_mdct_final[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
+extern int shine_test_mdct_type[MAX_CHANNELS][MAX_GRANULES];
+extern int shine_test_q_signed[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
+#endif
+
 typedef struct {
   int channels;
   int samplerate;
@@ -102,6 +111,9 @@ typedef struct {
 
 typedef struct {
   int32_t cos_l[18][36];
+  int32_t cos_l_start[18][36];
+  int32_t cos_l_stop[18][36];
+  int32_t cos_s[6][12];
 } mdct_t;
 
 typedef struct {
@@ -110,6 +122,14 @@ typedef struct {
   int32_t x[MAX_CHANNELS][HAN_SIZE];
 } subband_t;
 
+/* Per-granule window switching state. block_type is one of
+ * 0 normal, 1 start, 2 short, 3 stop on both the long and the short scale. */
+typedef struct {
+  int block_type[MAX_CHANNELS][MAX_GRANULES];
+  int previous_block_type[MAX_CHANNELS];
+  int any_short;
+} l3window_t;
+
 /* Side information */
 typedef struct {
   unsigned part2_3_length;
@@ -117,7 +137,10 @@ typedef struct {
   unsigned count1;
   unsigned global_gain;
   unsigned scalefac_compress;
-  unsigned table_select[3];
+  /* In window-switching mode the first two entries hold the long-block
+   * table_select values (as a decoder reads them) and the last two entries
+   * hold the short-block table_select values. */
+  unsigned table_select[4];
   unsigned region0_count;
   unsigned region1_count;
   unsigned preflag;
@@ -125,6 +148,9 @@ typedef struct {
   unsigned count1table_select;
   unsigned part2_length;
   unsigned sfb_lmax;
+  unsigned block_type;
+  unsigned mixed_block_flag;
+  unsigned subblock_gain[3];
   unsigned address1;
   unsigned address2;
   unsigned address3;
@@ -170,6 +196,7 @@ typedef struct shine_global_flags {
   int l3_enc[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
   int32_t l3_sb_sample[MAX_CHANNELS][MAX_GRANULES + 1][18][SBLIMIT];
   int32_t mdct_freq[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
+  l3window_t window;
   int ResvSize;
   int ResvMax;
   l3loop_t l3loop;

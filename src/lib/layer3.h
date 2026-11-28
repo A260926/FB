@@ -135,6 +135,29 @@ unsigned char *shine_encode_buffer(shine_t s, int16_t **data, int *written);
 unsigned char *shine_encode_buffer_interleaved(shine_t s, int16_t *data,
                                                int *written);
 
+/* Window-switching encoding.
+ *
+ * `block_types` has `block_type_count` entries, one per granule and channel,
+ * ordered granule-major, channel-minor (exactly 2*channels entries per frame
+ * for MPEG-1). Values are 0 normal, 1 start, 2 short and 3 stop. For every
+ * channel the type must start at normal and follow a legal transition:
+ * normal -> normal/start, start -> short, short -> short/stop,
+ * stop -> normal/start. State is carried across calls per channel; the two
+ * channels may differ.
+ *
+ * These entry points only support MPEG-1 (32, 44.1 and 48 kHz) with mono or
+ * plain STEREO, and the usual CBR bitrates. On invalid count, type,
+ * transition or unsupported configuration they return NULL and set
+ * *written = -1, without consuming any input; a subsequent valid call
+ * behaves exactly like a fresh instance with no failed request. The returned
+ * pointer follows the same lifetime rules as shine_encode_buffer(). */
+unsigned char *shine_encode_buffer_blocks(shine_t s, int16_t **data,
+                                          const uint8_t *block_types,
+                                          int block_type_count, int *written);
+unsigned char *shine_encode_buffer_interleaved_blocks(
+    shine_t s, int16_t *data, const uint8_t *block_types, int block_type_count,
+    int *written);
+
 /* Flush all data currently in the encoding buffer. Should be used before
  * closing the encoder, to make all encoded data has been written. */
 unsigned char *shine_flush(shine_t s, int *written);

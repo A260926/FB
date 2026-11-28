@@ -9,6 +9,10 @@
 #include "tables.h"
 #include "types.h"
 
+#ifdef SHINE_TEST_HOOKS
+int shine_test_q_signed[MAX_CHANNELS][MAX_GRANULES][GRANULE_SIZE];
+#endif
+
 static void shine_HuffmanCode(bitstream_t *bs, int table_select, int x, int y);
 static void shine_huffman_coder_count1(bitstream_t *bs,
                                        const struct huffcodetab *h, int v,
@@ -40,6 +44,28 @@ void shine_format_bitstream(shine_global_config *config) {
         if ((pr[i] < 0) && (pi[i] > 0))
           pi[i] *= -1;
       }
+#ifdef SHINE_TEST_HOOKS
+      /* Record the quantized (sign applied) spectrum in *natural* subband
+       * coordinates. For short blocks the encoder works in band/window/
+       * frequency order, so undo that reorder here; the test compares the
+       * decoded stream after applying the same inverse mapping. */
+      if (config->window.block_type[ch][gr] == 2) {
+        const int *sb =
+            &shine_scale_fact_band_index_short[config->mpeg.samplerate_index][0];
+        int pos = 0, b, w, f;
+        for (b = 0; b < 13; b++) {
+          int width = sb[b + 1] - sb[b];
+          for (w = 0; w < 3; w++)
+            for (f = 0; f < width; f++) {
+              int g = sb[b] + f;
+              int s = g / 6, kf = g % 6;
+              shine_test_q_signed[ch][gr][s * 18 + w * 6 + kf] = pi[pos++];
+            }
+        }
+      } else {
+        memcpy(shine_test_q_signed[ch][gr], pi, GRANULE_SIZE * sizeof(int));
+      }
+#endif
     }
 
   encodeSideInfo(config);
@@ -48,6 +74,7 @@ void shine_format_bitstream(shine_global_config *config) {
 
 static void encodeMainData(shine_global_config *config) {
   int gr, ch, sfb;
+  int any_short = config->window.any_short;
   shine_side_info_t si = config->side_info;
 
   for (gr = 0; gr < config->mpeg.granules_per_frame; gr++) {
@@ -57,18 +84,52 @@ static void encodeMainData(shine_global_config *config) {
       unsigned slen2 = shine_slen2_tab[gi->scalefac_compress];
       int *ix = &config->l3_enc[ch][gr][0];
 
-      if (gr == 0 || si.scfsi[ch][0] == 0)
+      if (gi->block_type == 2) {
+        /* Short blocks: three scalefactors per band, 6 bands at slen1 and 7
+         * at slen2, and no scfsi. With scalefac_compress 0 these are all
+         * zero-width, so no bits are produced. */
+        int w;
+        for (w = 0; w < 3; w++) {
+          for (sfb = 0; sfb < 6; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.s[gr][ch][w][sfb],
+                          slen1);
+          for (sfb = 6; sfb < 13; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.s[gr][ch][w][sfb],
+                          slen2);
+        }
+      } else if (any_short) {
+        /* Window-switching frame: scfsi is forced to zero, so every long
+         * block carries its complete set of scalefactors. */
         for (sfb = 0; sfb < 6; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen1);
-      if (gr == 0 || si.scfsi[ch][1] == 0)
+          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                        slen1);
         for (sfb = 6; sfb < 11; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen1);
-      if (gr == 0 || si.scfsi[ch][2] == 0)
+          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                        slen1);
         for (sfb = 11; sfb < 16; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen2);
-      if (gr == 0 || si.scfsi[ch][3] == 0)
+          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                        slen2);
         for (sfb = 16; sfb < 21; sfb++)
-          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb], slen2);
+          shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                        slen2);
+      } else {
+        if (gr == 0 || si.scfsi[ch][0] == 0)
+          for (sfb = 0; sfb < 6; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+        if (gr == 0 || si.scfsi[ch][1] == 0)
+          for (sfb = 6; sfb < 11; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen1);
+        if (gr == 0 || si.scfsi[ch][2] == 0)
+          for (sfb = 11; sfb < 16; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+        if (gr == 0 || si.scfsi[ch][3] == 0)
+          for (sfb = 16; sfb < 21; sfb++)
+            shine_putbits(&config->bs, config->scalefactor.l[gr][ch][sfb],
+                          slen2);
+      }
 
       Huffmancodebits(config, ix, gi);
     }
@@ -76,7 +137,7 @@ static void encodeMainData(shine_global_config *config) {
 }
 
 static void encodeSideInfo(shine_global_config *config) {
-  int gr, ch, scfsi_band, region;
+  int gr, ch, scfsi_band;
   shine_side_info_t si = config->side_info;
 
   shine_putbits(&config->bs, 0x7ff, 11);
@@ -124,13 +185,36 @@ static void encodeSideInfo(shine_global_config *config) {
         shine_putbits(&config->bs, gi->scalefac_compress, 4);
       else
         shine_putbits(&config->bs, gi->scalefac_compress, 9);
-      shine_putbits(&config->bs, 0, 1);
-
-      for (region = 0; region < 3; region++)
-        shine_putbits(&config->bs, gi->table_select[region], 5);
-
-      shine_putbits(&config->bs, gi->region0_count, 4);
-      shine_putbits(&config->bs, gi->region1_count, 3);
+      if (config->mpeg.version == MPEG_I) {
+        /* MPEG-1: 1-bit window_switching_flag. When set, the block carries
+         * block_type, mixed_block_flag, two table_select values and three
+         * subblock_gain values; region0_count/region1_count are implicit
+         * (ISO 2.4.3.4), which keeps the granule at 59 bits. */
+        if (gi->block_type != 0) {
+          int w;
+          shine_putbits(&config->bs, 1, 1);
+          shine_putbits(&config->bs, gi->block_type, 2);
+          shine_putbits(&config->bs, gi->mixed_block_flag, 1);
+          for (w = 0; w < 2; w++)
+            shine_putbits(&config->bs, gi->table_select[w], 5);
+          for (w = 0; w < 3; w++)
+            shine_putbits(&config->bs, gi->subblock_gain[w], 3);
+        } else {
+          int region;
+          shine_putbits(&config->bs, 0, 1);
+          for (region = 0; region < 3; region++)
+            shine_putbits(&config->bs, gi->table_select[region], 5);
+          shine_putbits(&config->bs, gi->region0_count, 4);
+          shine_putbits(&config->bs, gi->region1_count, 3);
+        }
+      } else {
+        int region;
+        shine_putbits(&config->bs, 0, 1);
+        for (region = 0; region < 3; region++)
+          shine_putbits(&config->bs, gi->table_select[region], 5);
+        shine_putbits(&config->bs, gi->region0_count, 4);
+        shine_putbits(&config->bs, gi->region1_count, 3);
+      }
 
       if (config->mpeg.version == MPEG_I)
         shine_putbits(&config->bs, gi->preflag, 1);
@@ -142,8 +226,6 @@ static void encodeSideInfo(shine_global_config *config) {
 /* Note the discussion of huffmancodebits() on pages 28 and 29 of the IS, as
   well as the definitions of the side information on pages 26 and 27. */
 static void Huffmancodebits(shine_global_config *config, int *ix, gr_info *gi) {
-  const int *scalefac =
-      &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
   unsigned scalefac_index;
   int region1Start, region2Start;
   int i, bigvalues, count1End;
@@ -156,10 +238,29 @@ static void Huffmancodebits(shine_global_config *config, int *ix, gr_info *gi) {
   /* 1: Write the bigvalues */
   bigvalues = gi->big_values << 1;
 
-  scalefac_index = gi->region0_count + 1;
-  region1Start = scalefac[scalefac_index];
-  scalefac_index += gi->region1_count + 1;
-  region2Start = scalefac[scalefac_index];
+  if (gi->block_type != 0) {
+    /* Window-switching: one explicit boundary at band 8, then table 1 for
+     * everything up to big_values (region2Start is effectively unreachable,
+     * matching the implicit region1_count = 36). Short blocks use the
+     * 192-line short grid. */
+    if (gi->block_type == 2 && !gi->mixed_block_flag) {
+      const int *sb =
+          &shine_scale_fact_band_index_short[config->mpeg.samplerate_index][0];
+      region1Start = 3 * sb[8];
+    } else {
+      const int *sl =
+          &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
+      region1Start = sl[8];
+    }
+    region2Start = 1 << 20; /* never reached */
+  } else {
+    const int *scalefac =
+        &shine_scale_fact_band_index[config->mpeg.samplerate_index][0];
+    scalefac_index = gi->region0_count + 1;
+    region1Start = scalefac[scalefac_index];
+    scalefac_index += gi->region1_count + 1;
+    region2Start = scalefac[scalefac_index];
+  }
 
   for (i = 0; i < bigvalues; i += 2) {
     /* get table pointer */
@@ -172,7 +273,6 @@ static void Huffmancodebits(shine_global_config *config, int *ix, gr_info *gi) {
       shine_HuffmanCode(&config->bs, tableindex, x, y);
     }
   }
-
   /* 2: Write count1 area */
   h = &shine_huffman_table[gi->count1table_select + 32];
   count1End = bigvalues + (gi->count1 << 2);

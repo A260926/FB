@@ -9,3 +9,5 @@ shine_flush
 shine_initialise
 shine_set_config_mpeg_defaults
 shine_samples_per_pass
+shine_encode_buffer_blocks
+shine_encode_buffer_interleaved_blocks

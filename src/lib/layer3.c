@@ -93,6 +93,7 @@ shine_global_config *shine_initialise(shine_config_t *pub_config) {
   shine_subband_initialise(config);
   shine_mdct_initialise(config);
   shine_loop_initialise(config);
+  shine_mdct_clear_block_types(config);
 
   /* Copy public config. */
   config->wave.channels = pub_config->wave.channels;
@@ -179,6 +180,8 @@ static unsigned char *shine_encode_buffer_internal(shine_global_config *config,
 
 unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
                                    int *written) {
+  shine_mdct_clear_block_types(config);
+
   config->buffer[0] = data[0];
   if (config->wave.channels == 2)
     config->buffer[1] = data[1];
@@ -188,6 +191,112 @@ unsigned char *shine_encode_buffer(shine_global_config *config, int16_t **data,
 
 unsigned char *shine_encode_buffer_interleaved(shine_global_config *config,
                                                int16_t *data, int *written) {
+  shine_mdct_clear_block_types(config);
+
+  config->buffer[0] = data;
+  if (config->wave.channels == 2)
+    config->buffer[1] = data + 1;
+
+  return shine_encode_buffer_internal(config, written, config->wave.channels);
+}
+
+/* Validate one channel's requested transition. Returns 0 when legal. */
+static int window_transition_ok(int from, int to) {
+  switch (from) {
+  case 0: /* normal */
+    return to == 0 || to == 1;
+  case 1: /* start */
+    return to == 2;
+  case 2: /* short */
+    return to == 2 || to == 3;
+  case 3: /* stop */
+    return to == 0 || to == 1;
+  }
+  return 0;
+}
+
+/* Check that the new entry points can handle this encoder at all. */
+static int blocks_config_supported(shine_global_config *config) {
+  if (config->mpeg.version != MPEG_I)
+    return 0;
+  if (config->wave.samplerate != 32000 && config->wave.samplerate != 44100 &&
+      config->wave.samplerate != 48000)
+    return 0;
+  if (config->wave.channels != 1 && config->wave.channels != 2)
+    return 0;
+  if (config->mpeg.mode != MONO && config->mpeg.mode != STEREO)
+    return 0;
+  /* Mono streams must use the mono mode and vice versa. */
+  if ((config->wave.channels == 1) != (config->mpeg.mode == MONO))
+    return 0;
+  return 1;
+}
+
+/* Validate and stage the requested window sequence. On failure no encoder
+ * state is modified. */
+static int blocks_prepare(shine_global_config *config, const uint8_t *types,
+                          int count) {
+  int ch, gr, i;
+  int next[MAX_CHANNELS];
+  int any_short = 0;
+
+  if (!types || !blocks_config_supported(config))
+    return 0;
+  if (count != 2 * config->wave.channels)
+    return 0;
+
+  for (ch = 0; ch < config->wave.channels; ch++)
+    next[ch] = config->window.previous_block_type[ch];
+
+  i = 0;
+  for (gr = 0; gr < 2; gr++)
+    for (ch = 0; ch < config->wave.channels; ch++, i++) {
+      int t = types[i];
+      if (t < 0 || t > 3)
+        return 0;
+      if (!window_transition_ok(next[ch], t))
+        return 0;
+      next[ch] = t;
+      if (t == 2)
+        any_short = 1;
+    }
+
+  i = 0;
+  config->window.any_short = any_short;
+  for (gr = 0; gr < 2; gr++)
+    for (ch = 0; ch < config->wave.channels; ch++, i++) {
+      shine_mdct_set_block_type(config, gr, ch, types[i]);
+      config->window.previous_block_type[ch] = types[i];
+    }
+  return 1;
+}
+
+unsigned char *shine_encode_buffer_blocks(shine_global_config *config,
+                                          int16_t **data,
+                                          const uint8_t *block_types,
+                                          int block_type_count, int *written) {
+  if (!blocks_prepare(config, block_types, block_type_count)) {
+    if (written)
+      *written = -1;
+    return NULL;
+  }
+
+  config->buffer[0] = data[0];
+  if (config->wave.channels == 2)
+    config->buffer[1] = data[1];
+
+  return shine_encode_buffer_internal(config, written, 1);
+}
+
+unsigned char *shine_encode_buffer_interleaved_blocks(
+    shine_global_config *config, int16_t *data, const uint8_t *block_types,
+    int block_type_count, int *written) {
+  if (!blocks_prepare(config, block_types, block_type_count)) {
+    if (written)
+      *written = -1;
+    return NULL;
+  }
+
   config->buffer[0] = data;
   if (config->wave.channels == 2)
     config->buffer[1] = data + 1;

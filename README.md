@@ -39,6 +39,47 @@ write(written, data);
 shine_close(s);
 ```
 
+Window switching
+----------------
+
+An audio editor that has already decided on the window layout can pass it to
+the encoder instead of letting every attack fall into a long block. The two
+extra entry points take the same arguments as their long-window counterparts,
+plus one block type per granule and channel:
+
+```c
+#include <shine/layer3.h>
+
+/* Two frames of stereo: the left/right channels are described independently
+ * and their states carry over from one call to the next. */
+shine_t s = shine_initialise(&config);
+int16_t *channel[2] = { left, right };
+
+/* Values: 0 = normal, 1 = start, 2 = short, 3 = stop. Entries are ordered
+ * granule-major, channel-minor, exactly 2 * channels per frame. */
+static const uint8_t frame0[4] = { 0, 0, 1, 1 }; /* gr0 normal, gr1 start */
+static const uint8_t frame1[4] = { 2, 2, 2, 2 }; /* both granules short    */
+
+data = shine_encode_buffer_blocks(s, channel, frame0, 4, &written);
+write(data, written);
+
+data = shine_encode_buffer_blocks(s, channel, frame1, 4, &written);
+write(data, written);
+```
+
+The interleaved form is `shine_encode_buffer_interleaved_blocks()`. For each
+channel the type must start at normal and follow a legal transition:
+normal -> normal/start, start -> short, short -> short/stop, stop ->
+normal/start. The two channels may use different sequences.
+
+These entry points only support MPEG-1 (32, 44.1 and 48 kHz) with mono or plain
+`STEREO`; CBR bitrates follow the usual table. On an unsupported configuration,
+a wrong count, an out-of-range type or an illegal transition they return `NULL`
+and set `*written = -1` without consuming any input, so a later valid call sees
+the same encoder state as if the bad request had never been made. The old
+`shine_encode_buffer()` and `shine_encode_buffer_interleaved()` entry points are
+unchanged and behave exactly like a block list of all-zero (normal) types.
+
 How fast is it?
 ---------------
 
