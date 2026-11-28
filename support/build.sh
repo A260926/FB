@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-sources=(common/vp9_header_parser.cc common/vp9_level_stats.cc common/libwebm_util.cc)
+sources=(common/vp9_header_parser.cc common/vp9_level_stats.cc common/libwebm_util.cc common/vp9_uncompressed_header.cc)
 for source in common/vp9_tiles.cc; do
  if test -f "$source"; then sources+=("$source"); fi
 done

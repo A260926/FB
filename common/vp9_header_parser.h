@@ -29,16 +29,13 @@ const int kMiSizeLog2 = 3;
 class Vp9HeaderParser {
  public:
   Vp9HeaderParser()
-      : frame_(NULL),
-        frame_size_(0),
-        bit_offset_(0),
+      : frame_size_(0),
         profile_(-1),
         show_existing_frame_(0),
         key_(0),
         altref_(0),
         error_resilient_mode_(0),
         intra_only_(0),
-        reset_frame_context_(0),
         bit_depth_(0),
         color_space_(0),
         color_range_(0),
@@ -47,12 +44,17 @@ class Vp9HeaderParser {
         refresh_frame_flags_(0),
         width_(0),
         height_(0),
+        display_width_(0),
+        display_height_(0),
         row_tiles_(0),
         column_tiles_(0),
         frame_parallel_mode_(0) {}
 
   // Parse the VP9 uncompressed header. The return values of the remaining
-  // functions are only valid on success.
+  // functions are only valid on success. Frames that inherit their resolution
+  // through frame_size_with_refs are still accepted (matching the historical
+  // behavior), but the dimension and tile layout fields stay at their reset
+  // values because no reference frame model is maintained.
   bool ParseUncompressedHeader(const uint8_t* frame, size_t length);
 
   size_t frame_size() const { return frame_size_; }
@@ -72,43 +74,13 @@ class Vp9HeaderParser {
   int frame_parallel_mode() const { return frame_parallel_mode_; }
 
  private:
-  // Set the compressed VP9 frame.
-  bool SetFrame(const uint8_t* frame, size_t length);
-
-  // Returns the next bit of the frame.
-  int ReadBit();
-
-  // Returns the next |bits| of the frame.
-  int VpxReadLiteral(int bits);
-
-  // Returns true if the vp9 sync code is valid.
-  bool ValidateVp9SyncCode();
-
-  // Parses bit_depth_, color_space_, subsampling_x_, subsampling_y_, and
-  // color_range_.
-  void ParseColorSpace();
-
-  // Parses width and height of the frame.
-  void ParseFrameResolution();
-
-  // Parses frame_parallel_mode_. This function skips over some features.
-  void ParseFrameParallelMode();
-
-  // Parses row and column tiles. This function skips over some features.
-  void ParseTileInfo();
-  void SkipDeltaQ();
-  int AlignPowerOfTwo(int value, int n);
-
-  const uint8_t* frame_;
   size_t frame_size_;
-  size_t bit_offset_;
   int profile_;
   int show_existing_frame_;
   int key_;
   int altref_;
   int error_resilient_mode_;
   int intra_only_;
-  int reset_frame_context_;
   int bit_depth_;
   int color_space_;
   int color_range_;
